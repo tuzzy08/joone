@@ -1,0 +1,127 @@
+# Project Progress & Status
+
+_This document serves as a living changelog and status board. Any human or agent picking up this directory should read this first to understand the current state of the implementation._
+
+---
+
+## Current Status: Milestone 7 (Testing & Evaluations)
+
+### What's Pending NEXT:
+
+1. **Milestone 2 TDD Cycle**: Begin Red-Green-Refactor for Config Manager, Model Factory, CLI, and Streaming.
+2. **Security Tier 2 & 3**: OS Keychain and encrypted config — tracked as planned items.
+
+---
+
+## Changelog
+
+### 2026-02-22: Project Initialization & Context Engine
+
+- **Docs Setup**: Extracted key insights from Harness Engineering and Prompt Caching research into the `docs/` folder (`01_insights...` through `08_roadmap...`).
+- **Tech Stack**: Finalized TypeScript + Node + LangChain + Zod + LangSmith architecture.
+- **Project Scaffold**: Initialized `package.json`, installed dependencies, configured strict `tsconfig.json`.
+- **Phase 1 Complete**: Implemented `CacheOptimizedPromptBuilder` (`src/core/promptBuilder.ts`) to strictly enforce the static-to-dynamic prefix caching rules via LangChain message formatting.
+- **Phase 1 Complete**: Implemented the base `ExecutionHarness` (`src/core/agentLoop.ts`) combining the LLM query and naive tool execution block.
+- **Phase 2 Started**: Created the `DeferredToolsDB` and mock `SearchToolsTool` (`src/tools/registry.ts`) to support lazy loading of tools for cache preservation.
+- **Testing & Sandbox Strategy**: Created `src/test_cache.ts` to empirically test Anthropic prompt caching locally. Outlined the architecture to use **E2B (e2b.dev)** or Docker for secure sandboxed code execution, isolating the agent's OS interactions from the host environment.
+- **Governance**: Created `AGENTS.md` and this `PROGRESS.md` file.
+
+### 2026-02-25: Architecture Refinements & Doc Overhaul
+
+- **Provider Abstraction**: Refactored `ExecutionHarness` to accept any LangChain `BaseChatModel | Runnable` instead of hardcoding `ChatAnthropic`. Model selection now happens at the call site (`src/index.ts`).
+- **AGENTS.md**: Added mandatory Red-Green-Refactor TDD workflow instructions; added reminder to use `tdd` skill if available.
+- **PRD**: Added CLI packaging (`npx joone`), provider/model selection feature, and E2B sandbox execution as core features.
+- **User Stories**: Added new Epics for CLI/Config (Epic 1) and E2B Sandbox Execution (Epic 3).
+- **System Architecture**: Updated mermaid diagram to show CLI config layer routing to provider selection and E2B sandbox replacing local OS execution.
+- **Roadmap**: Restructured milestones to include CLI Packaging (M2), E2B Sandbox Integration (M3), and made Testing & Evaluations an ongoing parallel milestone (M7) driven by TDD.
+
+### 2026-02-25: Milestone 7 — TDD Setup & First GREEN
+
+- **TDD Skills**: Located and verified both `tdd` and `test-driven-development` skills at `C:\Users\Lenovo\.agents\skills\`. Updated `AGENTS.md` with exact paths and instructions.
+- **Vitest Installed**: Added `vitest` as a dev dependency.
+- **PromptBuilder Tests (5/5 GREEN)**: Wrote 5 behavior-driven tests covering: strict prefix ordering, history appending after prefix, prefix stability across calls, `<system-reminder>` injection, and compaction. All passing.
+
+### 2026-02-26: Milestone 2 — Detailed Planning Complete
+
+- **PRD Updated**: Added streaming, expanded provider list (9+), tiered API key security (plain → keychain → encrypted), and dynamic provider loading.
+- **User Stories Updated**: Added Epic 2 (Streaming), expanded Epic 1 with masked input and planned keychain onboarding (US 1.6).
+- **System Architecture Updated**: Added Stream Handler component, Model Factory component, full provider table, and security tier roadmap.
+- **Roadmap Updated**: Detailed Milestone 2 into 5 sub-sections (2a–2e) with a 9-step TDD vertical slice test plan.
+- **Pending tracked items**: OS Keychain (Security Tier 2) and AES-256 encrypted config (Security Tier 3) tracked as planned items for future onboarding enhancement.
+
+### 2026-02-27: Milestone 2 — CLI Packaging & Provider Selection (COMPLETE)
+
+- **Config Manager** (`src/cli/config.ts`): `JooneConfig` interface, `loadConfig` (with env var fallback for 8 providers), `saveConfig` (with `chmod 600`), `DEFAULT_CONFIG`, `getProviderEnvVar`.
+- **Model Factory** (`src/cli/modelFactory.ts`): Dynamic `import()` for Anthropic and OpenAI. API key validation, missing package detection with install instructions. Support for 9+ providers planned.
+- **CLI Entry Point** (`src/cli/index.ts`): Commander.js with `joone` (default start) and `joone config` (interactive setup). Masked API key input via `@inquirer/prompts`. 9 provider choices + model lists.
+- **Streaming Support** (`src/core/agentLoop.ts`): `streamStep()` method on `ExecutionHarness` — text tokens emitted via `onToken` callback, tool call JSON chunks buffered until complete.
+- **Security Tier 1**: `saveConfig` writes with `mode: 0o600`, directory with `mode: 0o700`. Masked input in CLI. Env var fallback for API keys.
+- **Package.json**: Updated with `"bin"`, `"build"`, `"test"`, `"test:watch"` scripts. Version bumped to `0.1.0`.
+- **vitest.config.ts**: Created with test env vars to prevent Anthropic API key errors during testing.
+- **Bug fix**: Deleted stale compiled `.js`/`.d.ts` files that were shadowing `.ts` sources, causing `streamStep` not to be found at runtime.
+- **Tests**: 14/14 GREEN across 4 suites (config: 3, modelFactory: 4, promptBuilder: 5, streaming: 2).
+
+### 2026-02-28: Milestone 2.5 — Terminal UI (Ink + Clack) (COMPLETE)
+
+- **ESM Migration**: `package.json` → `"type": "module"`, `tsconfig.json` → `"module": "NodeNext"`, `"jsx": "react-jsx"`. All 17 relative imports updated with `.js` extensions. 14/14 tests GREEN after migration.
+- **Dependencies**: Added `ink`, `react`, `@types/react`, `@clack/prompts`, `chalk`, `ink-spinner`. Removed `@inquirer/prompts`.
+- **Clack Onboarding** (`src/cli/index.ts`): `joone config` rewritten with `intro()`, `outro()`, `spinner()`, `select()`, `password()`, `confirm()`, `cancel()`. Full cancellation handling with `isCancel()`. Chalk-styled terminal output for `joone start`.
+- **Ink Components** (`src/ui/`):
+  - `App.tsx`: Main REPL layout with header, message history, streaming text, tool call panel, status bar, keyboard input (Ctrl+C to exit), elapsed time timer.
+  - `Header.tsx`: Bordered box showing provider, model, streaming status with cyan accent.
+  - `MessageBubble.tsx`: Role-based styling (user=cyan, agent=green, system=yellow).
+  - `StreamingText.tsx`: Token-by-token rendering with blinking cursor during streaming.
+  - `ToolCallPanel.tsx`: Status-colored bordered box (yellow=running, green=success, red=error) with spinner, args display, truncated result.
+  - `StatusBar.tsx`: Persistent footer with token count, cache hit rate, tool calls, elapsed time.
+
+### 2026-02-28: Milestone 3 — Hybrid Sandbox Integration (COMPLETE)
+
+- **SandboxManager** (`src/sandbox/manager.ts`): E2B SDK wrapper with `create()`, `destroy()`, `exec(cmd)`, `uploadFile(path, content)`, and `isActive()` lifecycle management.
+- **FileSync** (`src/sandbox/sync.ts`): Host → sandbox file sync with `markDirty()`, `syncToSandbox()`, and `initialSync()`. Excludes `node_modules`, `.git`, `dist` on initial sync.
+- **ToolRouter** (`src/tools/router.ts`): Routes tools to HOST (`write_file`, `read_file`, `search_tools`) or SANDBOX (`bash`, `run_tests`, `install_deps`). Unknown tools default to sandbox for safety.
+- **Tests**: 26/26 GREEN across 6 suites (sandbox: 5, toolRouter: 7, plus existing 14).
+
+### 2026-02-28: Milestone 3.5 — Security Scanning Tool (COMPLETE)
+
+- **Config**: Added `sandboxTemplate?: string` to `JooneConfig` — config-driven switching between dev (lazy install) and prod (pre-baked template).
+- **LazyInstaller** (`src/sandbox/bootstrap.ts`): Handles on-demand tool installation inside the sandbox. Caches install state per session. Skips entirely when using a custom E2B template.
+- **SecurityScanTool** (`src/tools/security.ts`): Runs `gemini -x security:analyze` in sandbox. Supports targets: `"changes"`, `"file"`, `"deps"`. Handles CLI unavailability gracefully.
+- **DepScanTool** (`src/tools/security.ts`): Runs OSV-Scanner with `npm audit` fallback. Supports JSON and summary output.
+- **ToolRouter**: Added `security_scan` and `dep_scan` to `SANDBOX_TOOLS`.
+- **E2B Dockerfile** (`e2b/Dockerfile`): Pre-baked production template with Gemini CLI + security extension + OSV-Scanner.
+- **Tests**: 43/43 GREEN across 9 suites (bootstrap: 5, security: 5, plus existing 33).
+
+### 2026-02-28: Milestone 4 — Harness Engineering & Middlewares (COMPLETE)
+
+- **Middleware Types** (`src/middleware/types.ts`): `ToolCallContext` and `ToolMiddleware` interface with before/after hooks.
+- **MiddlewarePipeline** (`src/middleware/pipeline.ts`): Chains before-hooks in order, executes tool, chains after-hooks in reverse. Short-circuits on rejection.
+- **LoopDetectionMiddleware** (`src/middleware/loopDetection.ts`): Blocks after N identical consecutive tool calls (default: 3). Anti-doom-loop.
+- **CommandSanitizerMiddleware** (`src/middleware/commandSanitizer.ts`): Blocks destructive (`rm -rf /`, fork bombs), interactive (`vim`, `top`), and pipe-to-shell commands.
+- **PreCompletionMiddleware** (`src/middleware/preCompletion.ts`): Tracks test execution and blocks task completion until tests have been run.
+- **Integration**: `ExecutionHarness.executeToolCalls()` now routes through `MiddlewarePipeline`.
+- **Tests**: 55/55 GREEN across 10 suites (middleware: 12, plus existing 43).
+
+### 2026-02-28: Milestone 5 — Advanced Optimizations (COMPLETE)
+
+- **Enhanced Registry** (`src/tools/registry.ts`): Fuzzy search by name/description, `activateTool()` for dynamic mid-session tool loading, `ActivateToolTool`. Expanded stubs: git_diff, git_log, grep_search, list_dir.
+- **Token Counter** (`src/core/tokenCounter.ts`): Character-based heuristic (~4 chars/token). `estimateTokens()`, `countMessageTokens()`, `isNearCapacity()`.
+- **Context Compaction**: Enhanced `compactHistory()` with `keepLastN` parameter (preserves recent messages). Added `shouldCompact()` to `CacheOptimizedPromptBuilder`.
+- **Reasoning Router** (`src/core/reasoningRouter.ts`): HIGH/MEDIUM reasoning levels. HIGH for planning + error recovery, MEDIUM for tool-heavy turns. Temperature-only adjustment (preserves cache prefix).
+- **Tests**: 69/69 GREEN across 11 suites.
+
+### 2026-02-28: Milestone 5.5 — Browser, Web Search & Skills (COMPLETE)
+
+- **Browser Tool** (`src/tools/browser.ts`): Wraps `agent-browser` CLI. Actions: navigate, snapshot, click, type, screenshot, scroll. Runs in sandbox.
+- **Web Search Tool** (`src/tools/webSearch.ts`): Wraps `@valyu/ai-sdk`. Sources: web, papers, finance, patents, SEC, companies. Dynamic import, type stub in `src/types/valyu.d.ts`.
+- **Skills System**: `SkillLoader` (`src/skills/loader.ts`) discovers skills from project root (`./skills/`, `./.agents/skills/`) and user home (`~/.joone/skills/`, `~/.agents/skills/`). YAML frontmatter parsing, project-overrides-user deduplication.
+- **Skills Tools** (`src/skills/tools.ts`): `search_skills` + `load_skill` tools for agent runtime use.
+- **Config**: Added `valyuApiKey` to `JooneConfig`. Updated `ToolRouter` with browser/web_search/skills routing.
+
+### 2026-02-28: Milestone 6 — Tracing & Refinement (COMPLETE)
+
+- **SessionTracer** (`src/tracing/sessionTracer.ts`): Records LLM events (prompt/completion tokens), tool runs (name/args/duration/success), and errors. Saves traces to `~/.joone/traces/{id}.json`.
+- **Harness Integration** (`src/core/agentLoop.ts`): Wired `ExecutionHarness` to automatically emit tracing events natively through `SessionTracer` during `step()`, `streamStep()`, and `executeToolCalls()`.
+- **Trace Analyzer** (`src/tracing/analyzer.ts`): Analyzes a saved `SessionTrace` to detect doom-loops, cost hotspots (>20% total tokens), low cache efficiency (<70%), and error clusters. Generates actionable recommendations.
+- **LangSmith Integration** (`src/tracing/langsmith.ts`): Injects configured `LANGCHAIN_TRACING_V2` environment variables from `JooneConfig` natively on CLI startup.
+- **CLI Command** (`src/cli/index.ts`): Added `joone analyze [sessionId]` to read trace files and print the offline analysis report beautifully.
+- **Tests**: 91/91 GREEN across 13 suites.

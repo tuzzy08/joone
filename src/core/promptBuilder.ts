@@ -1,0 +1,111 @@
+import {
+  BaseMessage,
+  SystemMessage,
+  HumanMessage,
+  AIMessage,
+} from "@langchain/core/messages";
+import { countMessageTokens } from "./tokenCounter.js";
+
+export interface ContextState {
+  globalSystemInstructions: string;
+  projectMemory: string;
+  sessionContext: string;
+  conversationHistory: BaseMessage[];
+}
+
+/**
+ * CacheOptimizedPromptBuilder
+ *
+ * Enforces strict prefix ordering to maximize Claude's Prompt Caching.
+ *
+ * Order of Prefix (Static to Dynamic):
+ * 1. Base System Instructions + Tool Definitions (Globally Cached)
+ * 2. Project Memory (e.g., CLAUDE.md) (Cached per project)
+ * 3. Session State (Environment variables) (Cached per session)
+ * 4. Conversation Messages (Grows iteratively)
+ */
+export class CacheOptimizedPromptBuilder {
+  /**
+   * Compiles the full message array for the LLM request.
+   * The first messages are static, and subsequent ones are dynamic.
+   */
+  public buildPrompt(state: ContextState): BaseMessage[] {
+    // We use SystemMessages for the static prefix.
+    // In @langchain/anthropic, to use cache_control, we can inject it into the final message of each tier if needed,
+    // but preserving the exact order of the system prompts is the main requirement.
+
+    const systemMessages: BaseMessage[] = [
+      new SystemMessage({
+        content: state.globalSystemInstructions,
+        name: "global_instructions",
+      }),
+      new SystemMessage({
+        content: `--- Project Context ---\n${state.projectMemory}`,
+        name: "project_context",
+      }),
+      new SystemMessage({
+        content: `--- Session Rules ---\n${state.sessionContext}`,
+        name: "session_context",
+      }),
+    ];
+
+    // Combine the static prefix with the dynamic conversation history
+    return [...systemMessages, ...state.conversationHistory];
+  }
+
+  /**
+   * The System Reminder Pattern
+   * Instead of replacing the System Prompt (which breaks cache),
+   * use this to inject state updates into the Conversation History.
+   */
+  public injectSystemReminder(
+    history: BaseMessage[],
+    reminder: string,
+  ): BaseMessage[] {
+    const reminderMsg = new HumanMessage({
+      content: `<system-reminder>\n${reminder}\n</system-reminder>`,
+    });
+    return [...history, reminderMsg];
+  }
+
+  /**
+   * Cache-Safe Compaction
+   * When history gets too long, we preserve the last N messages (recent context)
+   * and replace older messages with a summary. The static system prefix is untouched.
+   *
+   * @param history - The full conversation history.
+   * @param summary - A text summary of the older messages.
+   * @param keepLastN - Number of recent messages to preserve (default: 6).
+   */
+  public compactHistory(
+    history: BaseMessage[],
+    summary: string,
+    keepLastN = 6,
+  ): BaseMessage[] {
+    const compactedMessage = new AIMessage({
+      content: `[System Action: The previous conversation history has been compacted.]\nSummary:\n${summary}`,
+    });
+
+    // Preserve recent messages for continuity
+    const recentMessages = history.slice(-Math.min(keepLastN, history.length));
+
+    return [compactedMessage, ...recentMessages];
+  }
+
+  /**
+   * Checks if the conversation should be compacted based on token usage.
+   *
+   * @param state - The current context state.
+   * @param maxTokens - The model's context window.
+   * @param threshold - Fraction of capacity to trigger (default: 0.8).
+   */
+  public shouldCompact(
+    state: ContextState,
+    maxTokens: number,
+    threshold = 0.8,
+  ): boolean {
+    const allMessages = this.buildPrompt(state);
+    const usage = countMessageTokens(allMessages);
+    return usage >= maxTokens * threshold;
+  }
+}
