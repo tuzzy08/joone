@@ -36,15 +36,17 @@
 ### 3.4. Hybrid Sandbox Execution
 
 - **Architecture**: The agent uses a **Hybrid** model — file operations (`write_file`, `read_file`) run on the **host machine** so the user sees changes live in their IDE, while all **code execution** (`bash`, tests, scripts) runs inside an [E2B](https://e2b.dev) cloud microVM sandbox.
-- **File Sync**: Before each sandbox execution, changed files are synced from host → sandbox. Only modified files are uploaded to minimize latency.
-- **Session Lifecycle**: A sandbox is created per agent session and destroyed when the session ends or after a configurable timeout.
+- **File Sync Mechanism**: Before each sandbox execution, changed files are synced from host → sandbox.
+  - _Tracking:_ Modifications are tracked via a "dirty paths" memory array. The `write_file` host tool explicitly marks paths as dirty upon successful write.
+  - _Concurrency:_ Concurrent modifications are prevented by the `ExecutionHarness`, which executes agent tool calls sequentially and blocks the LLM loop until file I/O and sandbox syncs are fully complete.
+  - _Conflict Resolution:_ The Host machine is the absolute source of truth. The sandbox filesystem is ephemeral and overwritten by the Host's dirty files before any command runs. Modifications made manually in the sandbox bypass the host and are lost upon destroy.
 - **Security**: The host machine is never exposed to agent-executed commands. Only file read/write touches the host.
 
 ### 3.5. Middleware Harness
 
 - **Loop Detection (Anti-Doom Loop)**: Tracks agent action duplication and injects corrective context to break the loop.
 - **Pre-Completion Checklist**: Intercepts task submission to force a self-verification/testing phase.
-- **Guardrails for Scale**: Prevents loading oversized files entirely into memory; enforces chunked reads.
+- **Guardrails for Scale**: Prevents loading oversized files (>1MB) entirely into memory; enforces chunked reads.
 
 ### 3.6. Lazy & Interoperable Tooling
 

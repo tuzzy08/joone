@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { HumanMessage, AIMessage, SystemMessage } from "@langchain/core/messages";
 import {
   SearchToolsTool,
   ActivateToolTool,
@@ -138,8 +138,8 @@ describe("Context Compaction", () => {
 
     // Should have: 1 summary + 4 preserved
     expect(compacted).toHaveLength(5);
-    expect((compacted[0] as AIMessage).content).toContain("compacted");
-    expect((compacted[0] as AIMessage).content).toContain("Summary of turns 1-2.");
+    expect((compacted[0] as SystemMessage).content).toContain("compacted");
+    expect((compacted[0] as SystemMessage).content).toContain("Summary of turns 1-2.");
   });
 });
 
@@ -153,7 +153,8 @@ describe("ReasoningRouter", () => {
   it("returns HIGH for the first turn (planning phase)", () => {
     const router = new ReasoningRouter();
 
-    const level = router.getLevel(false, false);
+    router.advanceTurn(false, false);
+    const level = router.getLevel();
 
     expect(level).toBe(ReasoningLevel.HIGH);
   });
@@ -163,8 +164,11 @@ describe("ReasoningRouter", () => {
   it("returns MEDIUM for tool-heavy turns after planning", () => {
     const router = new ReasoningRouter({ planningTurns: 1 });
 
-    router.getLevel(false, false); // turn 1: HIGH (planning)
-    const level = router.getLevel(true, false); // turn 2: tool call
+    router.advanceTurn(false, false); // turn 1
+    router.getLevel(); // HIGH (planning)
+    
+    router.advanceTurn(true, false); // turn 2
+    const level = router.getLevel(); // tool call shouldn't be high
 
     expect(level).toBe(ReasoningLevel.MEDIUM);
   });
@@ -174,9 +178,14 @@ describe("ReasoningRouter", () => {
   it("returns HIGH for recovery after an error", () => {
     const router = new ReasoningRouter({ planningTurns: 1 });
 
-    router.getLevel(false, false); // turn 1: planning
-    router.getLevel(true, false);  // turn 2: tool call (MEDIUM)
-    const level = router.getLevel(false, true); // turn 3: error!
+    router.advanceTurn(false, false); // turn 1
+    router.getLevel(); // planning
+    
+    router.advanceTurn(true, false);  // turn 2
+    router.getLevel(); // tool call (MEDIUM)
+    
+    router.advanceTurn(false, true); // turn 3
+    const level = router.getLevel(); // error!
 
     expect(level).toBe(ReasoningLevel.HIGH);
   });

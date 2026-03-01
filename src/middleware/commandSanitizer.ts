@@ -17,10 +17,9 @@ export class CommandSanitizerMiddleware implements ToolMiddleware {
    */
   private readonly blockedPatterns: [RegExp, string][] = [
     // Destructive
-    [/rm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+\/(?:\s|$)/, "destructive: rm -rf /"],
+    [/rm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+\/(\*)?(?:\s|$)/, "destructive: rm -rf /"],
     [/mkfs\b/, "destructive: filesystem format"],
-    [/\bdd\s+if=/, "destructive: raw disk write"],
-    [/:\(\)\s*\{\s*:\|:&\s*\}\s*;?\s*:/, "destructive: fork bomb"],
+    [/\bdd\s+.*of=\/dev\//, "destructive: raw disk write"],
     [/chmod\s+(-\w+\s+)*777\s+\//, "dangerous: recursive chmod 777 on root"],
 
     // Interactive / hanging

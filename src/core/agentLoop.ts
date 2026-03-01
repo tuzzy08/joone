@@ -1,5 +1,5 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { BaseMessage, AIMessage, ToolMessage, AIMessageChunk } from "@langchain/core/messages";
+import { BaseMessage, AIMessage, ToolMessage, AIMessageChunk, HumanMessage } from "@langchain/core/messages";
 import { Runnable } from "@langchain/core/runnables";
 import { CacheOptimizedPromptBuilder, ContextState } from "./promptBuilder.js";
 import { DynamicToolInterface } from "../tools/index.js";
@@ -105,10 +105,15 @@ export class ExecutionHarness {
         const toolCalls = Array.from(toolCallBuffers.values()).map((buf) => ({
             id: buf.id,
             name: buf.name,
-            args: JSON.parse(buf.argsJson || "{}"),
+            args: (() => {
+                try {
+                    return JSON.parse(buf.argsJson || "{}");
+                } catch {
+                    return { _parseError: true, rawArgs: buf.argsJson };
+                }
+            })(),
             type: "tool_call" as const,
         }));
-
         const result = new AIMessage({
             content: fullContent,
             tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
@@ -131,20 +136,33 @@ export class ExecutionHarness {
      * Executes tool calls from an AI response, routing through the middleware pipeline.
      * Each call passes through all registered before-hooks, then the tool, then after-hooks.
      */
-    public async executeToolCalls(aiMessage: AIMessage): Promise<ToolMessage[]> {
-        const results: ToolMessage[] = [];
+    public async executeToolCalls(aiMessage: AIMessage): Promise<(ToolMessage | HumanMessage)[]> {
+        const results: (ToolMessage | HumanMessage)[] = [];
         
         if (!aiMessage.tool_calls || aiMessage.tool_calls.length === 0) {
             return results;
         }
 
         for (const call of aiMessage.tool_calls) {
+            // Soft-Fail Edge Case: If the LLM omits the tool_call_id, do not execute the tool.
+            // Return a HumanMessage prompting correction instead of a malformed ToolMessage.
+            if (!call.id) {
+                this.tracer.recordError({ message: `Malformed tool call: Missing ID for ${call.name}`, tool: call.name });
+                results.push(new HumanMessage(
+                    `You attempted to call the tool '${call.name}', but you did not provide a tool_call_id. ` +
+                    `This is a malformed request. Please try again and ensure you provide a valid ID.`
+                ));
+                continue;
+            }
+
+            const safeCallId = call.id;
+
             const tool = this.availableTools.find(t => t.name === call.name);
             if (!tool) {
                 this.tracer.recordError({ message: `Tool ${call.name} not found`, tool: call.name });
                 results.push(new ToolMessage({
                     content: `Error: Tool ${call.name} not found.`,
-                    tool_call_id: call.id as string
+                    tool_call_id: safeCallId
                 }));
                 continue;
             }
@@ -152,7 +170,7 @@ export class ExecutionHarness {
             const ctx: ToolCallContext = {
                 toolName: call.name,
                 args: call.args,
-                callId: call.id as string,
+                callId: safeCallId,
             };
 
             const start = Date.now();
@@ -168,9 +186,11 @@ export class ExecutionHarness {
                     duration: Date.now() - start,
                     success: true
                 });
+                
+                const stringifiedOutput = typeof output === "string" ? output : JSON.stringify(output);
                 results.push(new ToolMessage({
-                    content: output,
-                    tool_call_id: call.id as string
+                    content: stringifiedOutput,
+                    tool_call_id: safeCallId
                 }));
             } catch (error: any) {
                 this.tracer.recordToolCall({
@@ -182,7 +202,7 @@ export class ExecutionHarness {
                 this.tracer.recordError({ message: error.message, tool: call.name });
                 results.push(new ToolMessage({
                     content: `Error executing tool: ${error.message}`,
-                    tool_call_id: call.id as string
+                    tool_call_id: safeCallId
                 }));
             }
         }

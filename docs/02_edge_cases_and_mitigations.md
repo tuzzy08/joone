@@ -21,10 +21,13 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
   - _Mitigation:_ Harness-level Guardrails. Restrict `read_file` to return chunks or force the agent to use `grep_search` / `view_file_outline`.
 - **The "Blind Retry" Doom Loop:**
   - _The Edge Case:_ The agent misses a space in a search-and-replace, fails, and tries the exact same edit endlessly.
-  - _Mitigation:_ Use `LoopDetectionMiddleware`. If the agent emits identical tool calls 3 times, intercept and inject: _"You have failed this 4 times. Stop trying this approach."_
+  - _Mitigation:_ Use `LoopDetectionMiddleware`. If the agent emits identical tool calls 3 times, intercept and inject: _"You have failed this 3 times. Stop trying this approach."_
 - **The "Fake Success" Verification:**
   - _The Edge Case:_ The agent runs tests, they fail, but the agent hallucinates that the failure is acceptable and marks the task as Done.
   - _Mitigation:_ The harness must parse terminal exit codes. If `pytest` returns `1`, the harness programmatically blocks the agent from exiting until tests pass.
 - **Tool Schema Amnesia (with Lazy Loading):**
   - _The Edge Case:_ An agent loads a complex tool lazily, uses it once, and then later forgets how to format its JSON schema.
   - _Mitigation:_ If a tool is "discovered", it must remain in the "Messages" context as a system reminder so the schema is preserved.
+- **The "Ghost Tool Call" (Context Desync):**
+  - _The Edge Case:_ A model emits a tool call but occasionally forgets to attach a internal `tool_call_id` (this breaks the strict `AIMessage[tool_calls] -> ToolMessage[tool_call_id]` sequencing rules required by modern LangChain/Anthropic/OpenAI APIs). If you forge a fake ID or cast it as a string, the LLM rejects the context on the next turn.
+  - _Mitigation:_ The "Soft Fail" approach. Intercept the malformed tool call in the `ExecutionHarness`. Do not execute the tool and do not emit a `ToolMessage`. Instead, emit a corrective `HumanMessage` stating: _"You attempted to call tool X, but didn't provide a tool_call_id. Please try again."_ This prevents context poisoning.

@@ -50,7 +50,9 @@ export class MiddlewarePipeline {
           return result;
         }
 
-        currentCtx = result;
+        if (result !== undefined) {
+          currentCtx = result;
+        }
       }
     }
 
@@ -61,9 +63,11 @@ export class MiddlewarePipeline {
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
       const mw = this.middlewares[i];
       if (mw.after) {
-        output = await mw.after(currentCtx, output);
-      }
-    }
+        const transformed = await mw.after(currentCtx, output);
+        if (transformed !== undefined) {
+          output = transformed;
+        }
+      }    }
 
     return output;
   }

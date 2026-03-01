@@ -139,7 +139,7 @@ describe("CacheOptimizedPromptBuilder", () => {
 
     // Default keepLastN=6, history has 4 → summary + all 4 preserved
     expect(compacted).toHaveLength(5);
-    expect(compacted[0]._getType()).toBe("ai");
+    expect(compacted[0]._getType()).toBe("system");
     expect(compacted[0].content).toContain("Completed steps 1 and 2.");
     // Recent messages are preserved after the summary
     expect(compacted[1].content).toBe("Step 1");

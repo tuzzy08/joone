@@ -82,12 +82,18 @@ export class CacheOptimizedPromptBuilder {
     summary: string,
     keepLastN = 6,
   ): BaseMessage[] {
-    const compactedMessage = new AIMessage({
-      content: `[System Action: The previous conversation history has been compacted.]\nSummary:\n${summary}`,
-    });
+    if (history.length === 0) {
+      return history;
+    }
+
+    // Use SystemMessage (not AIMessage) to avoid breaking user/assistant
+    // alternation rules enforced by some providers (e.g. Anthropic).
+    const compactedMessage = new SystemMessage(
+      `[The previous conversation history has been compacted.]\nSummary:\n${summary}`,
+    );
 
     // Preserve recent messages for continuity
-    const recentMessages = history.slice(-Math.min(keepLastN, history.length));
+    const recentMessages = history.slice(-keepLastN);
 
     return [compactedMessage, ...recentMessages];
   }

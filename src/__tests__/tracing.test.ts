@@ -120,6 +120,7 @@ describe("TraceAnalyzer", () => {
   const createTrace = (overrides?: Partial<SessionTrace>): SessionTrace => ({
     sessionId: "test",
     startedAt: Date.now() - 10000,
+    endedAt: Date.now(),
     events: [],
     summary: {
       totalTokens: 1000,
@@ -134,7 +135,6 @@ describe("TraceAnalyzer", () => {
     },
     ...overrides,
   });
-
   // ─── Test #89: Detects loop patterns ───
 
   it("detects doom-loop patterns in tool calls", () => {

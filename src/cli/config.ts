@@ -62,11 +62,15 @@ export function loadConfig(configPath: string): JooneConfig {
   if (!fs.existsSync(configPath)) {
     config = { ...DEFAULT_CONFIG };
   } else {
-    const raw = fs.readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(raw) as Partial<JooneConfig>;
-    config = { ...DEFAULT_CONFIG, ...parsed };
+    try {
+      const raw = fs.readFileSync(configPath, "utf-8");
+      const parsed = JSON.parse(raw) as Partial<JooneConfig>;
+      config = { ...DEFAULT_CONFIG, ...parsed };
+    } catch (err) {
+      console.warn(`Warning: Failed to parse config at ${configPath}. Using defaults.`);
+      config = { ...DEFAULT_CONFIG };
+    }
   }
-
   // Env var fallback: if apiKey is missing, check the provider's env var
   if (!config.apiKey) {
     const envVar = PROVIDER_ENV_VARS[config.provider];

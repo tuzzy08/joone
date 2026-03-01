@@ -8,8 +8,9 @@ _This document serves as a living changelog and status board. Any human or agent
 
 ### What's Pending NEXT:
 
-1. **Milestone 2 TDD Cycle**: Begin Red-Green-Refactor for Config Manager, Model Factory, CLI, and Streaming.
-2. **Security Tier 2 & 3**: OS Keychain and encrypted config — tracked as planned items.
+1. **Milestone 7 Evals**: Hook LangSmith datasets to ExecutionHarness for regression testing.
+2. **Dataset CI**: Build `joone eval` CLI command to assert Cache Hit Rate > 90% and Cost < $X.
+3. **Security Tier 2 & 3**: OS Keychain and encrypted config — tracked as planned items.
 
 ---
 

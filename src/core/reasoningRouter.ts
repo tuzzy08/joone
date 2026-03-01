@@ -43,36 +43,47 @@ export class ReasoningRouter {
   }
 
   /**
-   * Determines the reasoning level for the current turn.
+   * Advances to the next turn and records the outcome of the previous one.
+   * Call exactly once per turn BEFORE querying the level for the new turn.
    *
    * @param hasToolCalls - Whether the previous response contained tool calls.
    * @param hadError - Whether the previous turn resulted in an error.
-   * @returns The recommended reasoning level.
    */
-  getLevel(hasToolCalls: boolean, hadError: boolean): ReasoningLevel {
+  advanceTurn(hasToolCalls = false, hadError = false): void {
     this.turnCount++;
     this.lastTurnHadError = hadError;
 
+    if (hadError) {
+      this.consecutiveToolTurns = 0;
+    } else if (hasToolCalls) {
+      this.consecutiveToolTurns++;
+    } else {
+      this.consecutiveToolTurns = 0;
+    }
+  }
+
+  /**
+   * Determines the reasoning level for the current turn based on state.
+   *
+   * @returns The recommended reasoning level.
+   */
+  getLevel(): ReasoningLevel {
     // First N turns → always HIGH (planning phase)
     if (this.turnCount <= this.config.planningTurns) {
-      this.consecutiveToolTurns = 0;
       return ReasoningLevel.HIGH;
     }
 
     // Post-error → HIGH (recovery)
-    if (hadError) {
-      this.consecutiveToolTurns = 0;
+    if (this.lastTurnHadError) {
       return ReasoningLevel.HIGH;
     }
 
     // Tool-heavy turn → MEDIUM (mechanical work)
-    if (hasToolCalls) {
-      this.consecutiveToolTurns++;
+    if (this.consecutiveToolTurns > 0) {
       return ReasoningLevel.MEDIUM;
     }
 
-    // No tool calls (agent is thinking/planning) → HIGH
-    this.consecutiveToolTurns = 0;
+    // No tool calls previously (agent is thinking/planning) → HIGH
     return ReasoningLevel.HIGH;
   }
 
@@ -88,8 +99,8 @@ export class ReasoningRouter {
   /**
    * Convenience: get the recommended temperature for the current turn.
    */
-  getRecommendedTemperature(hasToolCalls: boolean, hadError: boolean): number {
-    return this.getTemperature(this.getLevel(hasToolCalls, hadError));
+  getRecommendedTemperature(): number {
+    return this.getTemperature(this.getLevel());
   }
 
   /**

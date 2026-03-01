@@ -2,7 +2,7 @@
   "name": "joone",
   "version": "0.1.0",
   "description": "An autonomous coding agent powered by prompt caching and harness engineering",
-  "main": "dist/index.js",
+  "main": "dist/cli/index.js",
   "bin": {
     "joone": "./dist/cli/index.js"
   },

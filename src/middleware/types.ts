@@ -31,13 +31,13 @@ export interface ToolMiddleware {
 
   /**
    * Pre-execution hook.
-   * @returns ToolCallContext to continue, or a string to reject the call.
+   * @returns ToolCallContext to mutate, a string to short-circuit, or void to pass through unmodified.
    */
-  before?(ctx: ToolCallContext): Promise<ToolCallContext | string> | ToolCallContext | string;
+  before?(ctx: ToolCallContext): Promise<ToolCallContext | string | void> | ToolCallContext | string | void;
 
   /**
    * Post-execution hook.
-   * @returns The (possibly transformed) tool result string.
+   * @returns The transformed tool result string, or void to pass through unmodified.
    */
-  after?(ctx: ToolCallContext, result: string): Promise<string> | string;
+  after?(ctx: ToolCallContext, result: string): Promise<string | void> | string | void;
 }

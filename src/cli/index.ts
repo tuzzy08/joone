@@ -326,6 +326,7 @@ Always use 'bash' to run terminal commands. Never read or write outside the curr
       };
 
       const { render } = await import("ink");
+      const React = await import("react");
       const { App } = await import("../ui/App.js");
       
       const { waitUntilExit } = render(
@@ -335,7 +336,8 @@ Always use 'bash' to run terminal commands. Never read or write outside the curr
           model: config.model, 
           streaming: config.streaming, 
           harness, 
-          initialState 
+          initialState,
+          maxTokens: config.maxTokens,
         })
       );
       

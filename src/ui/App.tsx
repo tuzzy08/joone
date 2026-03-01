@@ -8,6 +8,7 @@ import { StreamingText } from "./components/StreamingText.js";
 import { ToolCallPanel, ToolCallStatus } from "./components/ToolCallPanel.js";
 import { ExecutionHarness } from "../core/agentLoop.js";
 import { ContextState } from "../core/promptBuilder.js";
+import { countMessageTokens } from "../core/tokenCounter.js";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 
 export interface Message {
@@ -28,6 +29,7 @@ interface AppProps {
   streaming: boolean;
   harness: ExecutionHarness;
   initialState: ContextState;
+  maxTokens: number;
 }
 
 export const App: React.FC<AppProps> = ({
@@ -36,6 +38,7 @@ export const App: React.FC<AppProps> = ({
   streaming,
   harness,
   initialState,
+  maxTokens,
 }) => {
   const { exit } = useApp();
 
@@ -192,6 +195,7 @@ export const App: React.FC<AppProps> = ({
   };
 
   const summary = harness.tracer.getSummary();
+  const contextTokens = countMessageTokens(contextState.conversationHistory);
 
   return (
     <Box flexDirection="column" minHeight={15}>
@@ -246,8 +250,13 @@ export const App: React.FC<AppProps> = ({
       )}
 
       <StatusBar
-        tokenCount={summary.totalTokens}
+        contextTokens={contextTokens}
+        maxContextTokens={maxTokens}
+        totalTokens={summary.totalTokens}
+        cacheHitRate={summary.cacheHitRate}
         toolCalls={summary.toolCallCount}
+        turns={summary.turnCount}
+        cost={summary.totalCost}
         elapsed={elapsed}
       />
     </Box>
