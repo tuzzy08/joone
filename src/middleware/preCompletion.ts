@@ -1,4 +1,5 @@
 import { ToolCallContext, ToolMiddleware } from "./types.js";
+import { ToolResult } from "../tools/index.js";
 
 /**
  * Prevents the agent from marking a task as "done" without running tests.
@@ -12,7 +13,7 @@ import { ToolCallContext, ToolMiddleware } from "./types.js";
 export class PreCompletionMiddleware implements ToolMiddleware {
   readonly name = "PreCompletion";
 
-  private testsRan = false;
+  private testsPassed = false;
 
   /** Patterns in bash commands that count as "running tests". */
   private readonly testPatterns = [
@@ -37,11 +38,11 @@ export class PreCompletionMiddleware implements ToolMiddleware {
   ]);
 
   before(ctx: ToolCallContext): ToolCallContext | string {
-    // Track test execution via bash commands
+    // When a test command is initiated, assume it hasn't passed yet
     if (ctx.toolName === "bash" && typeof ctx.args.command === "string") {
       for (const pattern of this.testPatterns) {
         if (pattern.test(ctx.args.command)) {
-          this.testsRan = true;
+          this.testsPassed = false;
           break;
         }
       }
@@ -49,11 +50,11 @@ export class PreCompletionMiddleware implements ToolMiddleware {
 
     // Intercept completion attempts
     if (this.completionSignals.has(ctx.toolName)) {
-      if (!this.testsRan) {
+      if (!this.testsPassed) {
         return (
-          "⚠ You must run tests before completing the task.\n" +
+          "⚠ You must run tests before completing the task, AND they must pass.\n" +
           "Use the bash tool to execute your test suite (e.g., `npm test`, `vitest`, `pytest`).\n" +
-          "Once tests pass, you may attempt completion again."
+          "If tests fail, fix the issues. Once tests pass cleanly, you may attempt completion again."
         );
       }
     }
@@ -61,17 +62,33 @@ export class PreCompletionMiddleware implements ToolMiddleware {
     return ctx;
   }
 
+  after(ctx: ToolCallContext, result: ToolResult): void {
+    if (ctx.toolName === "bash" && typeof ctx.args.command === "string") {
+      for (const pattern of this.testPatterns) {
+        if (pattern.test(ctx.args.command)) {
+          // Robustly check the exact exit code from the tool metadata
+          if (result.metadata?.exitCode === 0) {
+            this.testsPassed = true;
+          } else {
+            this.testsPassed = false;
+          }
+          break;
+        }
+      }
+    }
+  }
+
   /**
-   * Returns whether tests have been run in this session.
+   * Returns whether tests have been run and passed in this session.
    */
-  hasRunTests(): boolean {
-    return this.testsRan;
+  hasPassedTests(): boolean {
+    return this.testsPassed;
   }
 
   /**
    * Resets state. Useful for testing or session boundaries.
    */
   reset(): void {
-    this.testsRan = false;
+    this.testsPassed = false;
   }
 }

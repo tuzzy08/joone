@@ -60,7 +60,28 @@
 
 ## 4. Non-Functional Requirements
 
-- **Latency**: High cache hit rates (>80% for long sessions) leading to sub-second Time-To-First-Token.
-- **Cost**: Minimize redundant prefix token generation.
-- **Extensibility**: Middleware pipeline should make it trivial to add new guardrails.
-- **Development Process**: Strict Red-Green-Refactor TDD for all new features.
+- **Latency:** High cache hit rates (>80% for long sessions) leading to sub-second Time-To-First-Token.
+- **Cost:** Minimize redundant prefix token generation.
+- **Extensibility:** Middleware pipeline should make it trivial to add new guardrails.
+- **Development Process:** Strict Red-Green-Refactor TDD for all new features.
+
+### 4.1 Error Handling & Degraded Modes
+
+- **Sandbox Failures:** The `SandboxManager` is architected with an `ISandboxWrapper` interface. If the primary cloud **E2B** sandbox fails to initialize (e.g., due to network drops, API outages, or invalid keys), the manager will automatically print a warning and gracefully degrade to a local **OpenSandbox** deployment (`localhost:8080`) to ensure execution continuity.
+- **LLM Failures (Planned):** If the remote LLM provider API goes down, the Model Factory should seamlessly fallback to a local Ollama instance if available.
+
+### 4.2 Rate Limiting & Cost Controls (Planned)
+
+- **Session Budgets:** Users can configure a maximum token budget (e.g., $5.00) per session. The `ExecutionHarness` tracks usage via the `SessionTracer` and will forcefully halt the agent if the threshold is reached.
+- **Loop Circuit Breakers:** The `LoopDetectionMiddleware` acts as a behavioral rate limit, preventing the agent from infinitely burning tokens on failed bash commands.
+
+### 4.3 Sandbox Authentication Management
+
+- **E2B:** Authentication is managed via the `E2B_API_KEY` environment variable or securely stored in `~/.joone/config.json`.
+- **OpenSandbox (Fallback):** Handled via `OPENSANDBOX_API_KEY` and `OPENSANDBOX_DOMAIN` properties in the config, falling back to a local Docker `localhost:8080` endpoint.
+
+### 4.4 Telemetry, Privacy & Data Retention
+
+- **Local-First Tracing:** All session reasoning and tool execution traces are logged to `~/.joone/traces/` as local JSON files for offline analysis using `TraceAnalyzer`.
+- **Data Retention:** Local traces are automatically rotated/deleted after 30 days to prevent infinite disk bloat.
+- **Privacy:** Project source code is _never_ sent to third-party telemetry providers unless the user intentionally enables the optional `LANGSMITH_API_KEY` for advanced dashboard debugging.

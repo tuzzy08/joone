@@ -1,6 +1,6 @@
 import { SandboxManager } from "../sandbox/manager.js";
 import { LazyInstaller } from "../sandbox/bootstrap.js";
-import { DynamicToolInterface } from "./index.js";
+import { DynamicToolInterface, ToolResult } from "./index.js";
 
 // ─── Sandbox + Installer references (set at session start) ──────────────────
 
@@ -17,6 +17,24 @@ export function bindSecuritySandbox(
 ): void {
   _sandboxManager = sandbox;
   _installer = installer;
+}
+
+// ─── Security Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Escapes a string so it can be safely used as an argument in a Bash shell command.
+ */
+function escapeBashArg(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Validates a file path to prevent directory traversal out of the workspace.
+ */
+function isSafePath(pathStr: string): boolean {
+  if (!pathStr || pathStr.trim() === "") return false;
+  if (pathStr.includes("..") || pathStr.startsWith("/")) return false;
+  return true;
 }
 
 // ─── SecurityScanTool ───────────────────────────────────────────────────────────
@@ -54,25 +72,28 @@ export const SecurityScanTool: DynamicToolInterface = {
     },
     required: ["target"],
   },
-  execute: async (args: { target: string; path?: string }) => {
+  execute: async (args: { target: string; path?: string }): Promise<ToolResult> => {
     if (!_sandboxManager || !_sandboxManager.isActive()) {
-      throw new Error("Sandbox is not active. Cannot run security scan.");
+      return { content: "Sandbox is not active. Cannot run security scan.", isError: true };
     }
     if (!_installer) {
-      throw new Error("LazyInstaller not initialized. Call bindSecuritySandbox() first.");
+      return { content: "LazyInstaller not initialized. Call bindSecuritySandbox() first.", isError: true };
     }
 
     // Ensure Gemini CLI is available
     const cliReady = await _installer.ensureGeminiCli(_sandboxManager);
 
     if (!cliReady) {
-      return (
-        "⚠ Gemini CLI could not be installed in the sandbox.\n" +
-        "Suggestions:\n" +
-        '  - Use `dep_scan` tool for dependency vulnerability scanning (uses npm audit)\n' +
-        "  - Manually review code for OWASP Top 10 vulnerabilities\n" +
-        "  - Set sandboxTemplate to a pre-baked template with Gemini CLI installed"
-      );
+      return {
+        content: (
+          "⚠ Gemini CLI could not be installed in the sandbox.\n" +
+          "Suggestions:\n" +
+          '  - Use `dep_scan` tool for dependency vulnerability scanning (uses npm audit)\n' +
+          "  - Manually review code for OWASP Top 10 vulnerabilities\n" +
+          "  - Set sandboxTemplate to a pre-baked template with Gemini CLI installed"
+        ),
+        isError: true
+      };
     }
 
     // Build the command based on target
@@ -83,24 +104,35 @@ export const SecurityScanTool: DynamicToolInterface = {
         break;
       case "file":
         if (!args.path) {
-          return "Error: 'path' is required when target is 'file'.";
+          return { content: "Error: 'path' is required when target is 'file'.", isError: true };
         }
-        command = `cd /workspace && gemini -x security:analyze --file "${args.path}" 2>&1`;
+        if (!isSafePath(args.path)) {
+          return { content: "Error: Invalid file path. Path must be relative and cannot contain traversal characters ('..').", isError: true };
+        }
+        command = `cd /workspace && gemini -x security:analyze --file ${escapeBashArg(args.path)} 2>&1`;
         break;
       case "deps":
         command = "cd /workspace && gemini -x security:analyze --deps-only 2>&1";
         break;
       default:
-        return `Error: Unknown target "${args.target}". Use "changes", "file", or "deps".`;
+        return { content: `Error: Unknown target "${args.target}". Use "changes", "file", or "deps".`, isError: true };
     }
 
     const result = await _sandboxManager.exec(command);
 
     if (result.exitCode !== 0) {
-      return `Security scan failed (exit code ${result.exitCode}):\n${result.stdout}\n${result.stderr}`;
+      return {
+        content: `Security scan failed (exit code ${result.exitCode}):\n${result.stdout}\n${result.stderr}`,
+        metadata: { exitCode: result.exitCode },
+        isError: true
+      };
     }
 
-    return result.stdout || "Security scan completed — no issues found.";
+    return {
+      content: result.stdout || "Security scan completed — no issues found.",
+      metadata: { exitCode: result.exitCode },
+      isError: false
+    };
   },
 };
 
@@ -128,12 +160,12 @@ export const DepScanTool: DynamicToolInterface = {
       },
     },
   },
-  execute: async (args?: { format?: string }) => {
+  execute: async (args?: { format?: string }): Promise<ToolResult> => {
     if (!_sandboxManager || !_sandboxManager.isActive()) {
-      throw new Error("Sandbox is not active. Cannot run dependency scan.");
+      return { content: "Sandbox is not active. Cannot run dependency scan.", isError: true };
     }
     if (!_installer) {
-      throw new Error("LazyInstaller not initialized.");
+      return { content: "LazyInstaller not initialized.", isError: true };
     }
 
     const format = args?.format ?? "summary";
@@ -150,13 +182,24 @@ export const DepScanTool: DynamicToolInterface = {
       const result = await _sandboxManager.exec(osvCmd);
 
       if (result.exitCode === 0) {
-        return result.stdout || "No known vulnerabilities found in dependencies.";
+        return {
+          content: result.stdout || "No known vulnerabilities found in dependencies.",
+          metadata: { exitCode: result.exitCode },
+          isError: false
+        };
       }
 
       // Exit code 1 from OSV-Scanner means vulnerabilities found — still valid output
-      if (result.stdout) {
-        return result.stdout;
+      if (result.exitCode === 1 && result.stdout) {
+        return {
+          content: result.stdout,
+          metadata: { exitCode: result.exitCode },
+          isError: false
+        };
       }
+
+      // If we reach here, OSV-Scanner failed for another reason (e.g. exit > 1)
+      console.warn(`⚠ OSV-Scanner failed (exit code ${result.exitCode}). Falling back to npm audit.\nDetails: ${result.stdout}\n${result.stderr}`);
     }
 
     // Fallback: npm audit
@@ -168,6 +211,10 @@ export const DepScanTool: DynamicToolInterface = {
     const auditResult = await _sandboxManager.exec(auditCmd);
 
     // npm audit returns 1 when vulnerabilities are found — that's valid output
-    return auditResult.stdout || "No known vulnerabilities found in dependencies.";
+    return {
+      content: auditResult.stdout || "No known vulnerabilities found in dependencies.",
+      metadata: { exitCode: auditResult.exitCode },
+      isError: false
+    };
   },
 };

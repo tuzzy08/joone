@@ -10,7 +10,7 @@ _This document serves as a living changelog and status board. Any human or agent
 
 1. **Milestone 7 Evals**: Hook LangSmith datasets to ExecutionHarness for regression testing.
 2. **Dataset CI**: Build `joone eval` CLI command to assert Cache Hit Rate > 90% and Cost < $X.
-3. **Security Tier 2 & 3**: OS Keychain and encrypted config — tracked as planned items.
+3. **Security Tier 2 & 3 (Planned)**: OS Keychain and encrypted config.
 
 ---
 
@@ -126,3 +126,11 @@ _This document serves as a living changelog and status board. Any human or agent
 - **LangSmith Integration** (`src/tracing/langsmith.ts`): Injects configured `LANGCHAIN_TRACING_V2` environment variables from `JooneConfig` natively on CLI startup.
 - **CLI Command** (`src/cli/index.ts`): Added `joone analyze [sessionId]` to read trace files and print the offline analysis report beautifully.
 - **Tests**: 91/91 GREEN across 13 suites.
+
+### 2026-03-01: Milestone 8 — OpenSandbox Fallback & NFRs (COMPLETE)
+
+- **SandboxManager (`ISandboxWrapper`)**: Refactored the core sandbox execution system to support multiple backends securely. Created `E2BSandboxWrapper` and `OpenSandboxWrapper`.
+- **Graceful Degradation**: If E2B fails to initialize (e.g. from a network error or bad API key), the agent automatically catches the error and degrades instantly to a local Docker `OpenSandbox` container on `localhost:8080`.
+- **Config & CLI**: Updated `JooneConfig`, `loadConfig`/`saveConfig`, and the `joone config` Clack onboarding wizard to optionally prompt for `OpenSandbox API key` and `Domain`.
+- **NFRs Documented**: Formally established architectural standards in `docs/05_prd.md` for Error Handling (Fallback), Rate Limiting (Budgets & Loop Breakers), Authentication (CLI keys), and Telemetry Data Retention (Local JSONs rotated at 30 days — 100% private).
+- **Tests**: 95/95 GREEN tests ensuring the sandbox layer abstraction natively handles API mappings without breaking `BashTool`.

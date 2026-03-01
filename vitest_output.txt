@@ -1,3 +1,41 @@
 
 [1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/Lenovo/Desktop/New folder/joone[39m
 
+ [31m❯[39m src/__tests__/m55.test.ts [2m([22m[2m13 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 187[2mms[22m[39m
+     [32m✓[39m has the correct schema with all supported actions[32m 5[2mms[22m[39m
+     [32m✓[39m throws when sandbox is not active[32m 1[2mms[22m[39m
+     [32m✓[39m returns error when API key is not configured[32m 1[2mms[22m[39m
+     [32m✓[39m schema includes all search sources[32m 1[2mms[22m[39m
+     [32m✓[39m discovers skills from a directory[32m 21[2mms[22m[39m
+     [32m✓[39m parses YAML frontmatter correctly[32m 2[2mms[22m[39m
+[31m     [31m×[31m project skills override user-level skills with the same name[39m[32m 10[2mms[22m[39m
+     [32m✓[39m loads the full content of a skill[32m 32[2mms[22m[39m
+     [32m✓[39m search_skills finds matching skills[32m 39[2mms[22m[39m
+     [32m✓[39m load_skill returns the full SKILL.md content[32m 71[2mms[22m[39m
+     [32m✓[39m routes browser to sandbox[32m 0[2mms[22m[39m
+     [32m✓[39m routes web_search to host[32m 0[2mms[22m[39m
+     [32m✓[39m routes search_skills and load_skill to host[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/__tests__/m55.test.ts[2m > [22mSkillLoader[2m > [22mproject skills override user-level skills with the same name
+[31m[1mTypeError[22m: Cannot spy on export "homedir". Module namespace is not configurable in ESM. See: https://vitest.dev/guide/browser/#limitations[39m
+[36m [2m❯[22m src/__tests__/m55.test.ts:[2m130:27[22m[39m
+    [90m128| [39m  it("project skills override user-level skills with the same name", (…
+    [90m129| [39m    // Mock os.homedir to point to tmpDir so user skills load from the…
+    [90m130| [39m    [35mconst[39m homedirSpy [33m=[39m vi[33m.[39m[34mspyOn[39m(os[33m,[39m [32m"homedir"[39m)[33m.[39m[34mmockReturnValue[39m(tmpDir)[33m;[39m
+    [90m   | [39m                          [31m^[39m
+    [90m131| [39m
+    [90m132| [39m    [90m// Create user-level skill[39m
+
+[31m[1mCaused by: TypeError[22m: Cannot redefine property: homedir[39m
+[36m [2m❯[22m src/__tests__/m55.test.ts:[2m130:27[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m12 passed[39m[22m[90m (13)[39m
+[2m   Start at [22m 18:32:18
+[2m   Duration [22m 1.26s[2m (transform 611ms, setup 0ms, import 802ms, tests 187ms, environment 0ms)[22m
+

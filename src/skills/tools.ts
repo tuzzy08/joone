@@ -1,4 +1,4 @@
-import { DynamicToolInterface } from "../tools/index.js";
+import { DynamicToolInterface, ToolResult } from "../tools/index.js";
 import { SkillLoader } from "./loader.js";
 
 // ─── Shared SkillLoader instance ──────────────────────────────────────────────
@@ -33,7 +33,7 @@ export const SearchSkillsTool: DynamicToolInterface = {
       },
     },
   },
-  execute: async (args?: { query?: string }) => {
+  execute: async (args?: { query?: string }): Promise<ToolResult> => {
     const loader = getLoader();
     let skills = loader.discoverSkills();
 
@@ -47,19 +47,22 @@ export const SearchSkillsTool: DynamicToolInterface = {
     }
 
     if (skills.length === 0) {
-      return args?.query
-        ? `No skills found matching "${args.query}".`
-        : "No skills found. Create a skill by adding a folder with SKILL.md to ./skills/ or ~/.joone/skills/.";
+      return {
+        content: args?.query
+          ? `No skills found matching "${args.query}".`
+          : "No skills found. Create a skill by adding a folder with SKILL.md to ./skills/ or ~/.joone/skills/."
+      };
     }
 
     const list = skills
       .map((s) => `- **${s.name}** (${s.source}): ${s.description}`)
       .join("\n");
 
-    return (
-      `Found ${skills.length} skill(s):\n${list}\n\n` +
-      `To load a skill, call \`load_skill\` with the skill name.`
-    );
+    return {
+      content:
+        `Found ${skills.length} skill(s):\n${list}\n\n` +
+        `To load a skill, call \`load_skill\` with the skill name.`
+    };
   },
 };
 
@@ -80,14 +83,17 @@ export const LoadSkillTool: DynamicToolInterface = {
     },
     required: ["name"],
   },
-  execute: async (args: { name: string }) => {
+  execute: async (args: { name: string }): Promise<ToolResult> => {
     const loader = getLoader();
     const content = loader.loadSkill(args.name);
 
     if (!content) {
-      return `Error: Skill "${args.name}" not found. Use search_skills to see available skills.`;
+      return {
+        content: `Error: Skill "${args.name}" not found. Use search_skills to see available skills.`,
+        isError: true
+      };
     }
 
-    return content;
+    return { content };
   },
 };

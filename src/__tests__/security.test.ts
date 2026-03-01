@@ -43,7 +43,7 @@ describe("SecurityScanTool", () => {
 
     const result = await SecurityScanTool.execute({ target: "changes" });
 
-    expect(result).toContain("Security Report");
+    expect(result.content).toContain("Security Report");
     expect(mockSandbox.exec).toHaveBeenCalledWith(
       expect.stringContaining("security:analyze")
     );
@@ -54,7 +54,7 @@ describe("SecurityScanTool", () => {
   it("returns error when target is 'file' but no path provided", async () => {
     const result = await SecurityScanTool.execute({ target: "file" });
 
-    expect(result).toMatch(/path.*required/i);
+    expect(result.content).toMatch(/path.*required/i);
   });
 
   // ─── Test #41: Handles failed scans gracefully ───
@@ -68,8 +68,8 @@ describe("SecurityScanTool", () => {
 
     const result = await SecurityScanTool.execute({ target: "changes" });
 
-    expect(result).toContain("failed");
-    expect(result).toContain("Some error occurred");
+    expect(result.content).toContain("failed");
+    expect(result.content).toContain("Some error occurred");
   });
 });
 
@@ -98,8 +98,8 @@ describe("DepScanTool", () => {
 
     const result = await DepScanTool.execute({ format: "summary" });
 
-    expect(result).toContain("CVE-2024-1234");
-    expect(result).toContain("CVE-2024-5678");
+    expect(result.content).toContain("CVE-2024-1234");
+    expect(result.content).toContain("CVE-2024-5678");
   });
 
   // ─── Test #43: Falls back to npm audit when OSV-Scanner fails ───
@@ -117,6 +117,6 @@ describe("DepScanTool", () => {
 
     const result = await DepScanTool.execute({ format: "summary" });
 
-    expect(result).toContain("0 vulnerabilities");
+    expect(result.content).toContain("0 vulnerabilities");
   });
 });

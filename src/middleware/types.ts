@@ -5,6 +5,8 @@
  * of a tool call. The pipeline chains them in order.
  */
 
+import { ToolResult } from "../tools/index.js";
+
 /**
  * Context object passed through the middleware chain for each tool call.
  */
@@ -37,7 +39,7 @@ export interface ToolMiddleware {
 
   /**
    * Post-execution hook.
-   * @returns The transformed tool result string, or void to pass through unmodified.
+   * @returns The transformed tool result object, or void to pass through unmodified.
    */
-  after?(ctx: ToolCallContext, result: string): Promise<string | void> | string | void;
+  after?(ctx: ToolCallContext, result: ToolResult): Promise<ToolResult | void> | ToolResult | void;
 }

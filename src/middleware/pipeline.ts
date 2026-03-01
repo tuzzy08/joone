@@ -1,4 +1,5 @@
 import { ToolCallContext, ToolMiddleware } from "./types.js";
+import { ToolResult } from "../tools/index.js";
 
 /**
  * Executes tool calls through a chain of middleware hooks.
@@ -36,7 +37,7 @@ export class MiddlewarePipeline {
    */
   async run(
     ctx: ToolCallContext,
-    executeFn: (ctx: ToolCallContext) => Promise<string>
+    executeFn: (ctx: ToolCallContext) => Promise<ToolResult> | ToolResult
   ): Promise<string> {
     // ── Before phase: run hooks in order ──
     let currentCtx = ctx;
@@ -57,7 +58,7 @@ export class MiddlewarePipeline {
     }
 
     // ── Execute the tool ──
-    let output = await executeFn(currentCtx);
+    let output: ToolResult = await executeFn(currentCtx);
 
     // ── After phase: run hooks in reverse order ──
     for (let i = this.middlewares.length - 1; i >= 0; i--) {
@@ -69,6 +70,6 @@ export class MiddlewarePipeline {
         }
       }    }
 
-    return output;
+    return output.content;
   }
 }

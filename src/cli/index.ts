@@ -33,7 +33,7 @@ const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 const SUPPORTED_PROVIDERS = [
   { value: "anthropic", label: "Anthropic", hint: "Claude 4, 3.5 Sonnet, Opus, Haiku" },
   { value: "openai", label: "OpenAI", hint: "GPT-4o, o1, o3-mini" },
-  { value: "google", label: "Google", hint: "Gemini 2.0 Flash, 1.5 Pro" },
+  { value: "google", label: "Google", hint: "Gemini 3.1 Pro-preview, 3 Flash-preview" },
   { value: "mistral", label: "Mistral", hint: "Mistral Large, Codestral" },
   { value: "groq", label: "Groq", hint: "Llama 3.1 70B, Mixtral" },
   { value: "deepseek", label: "DeepSeek", hint: "DeepSeek Chat, Reasoner" },
@@ -185,11 +185,27 @@ async function runOnboarding(): Promise<JooneConfig> {
 
   // E2B (Sandbox)
   let e2bKey = await password({
-    message: `E2B API key ${chalk.dim("(sandbox)")}`,
+    message: `E2B API key ${chalk.dim("(primary sandbox)")}`,
     mask: "•",
   });
   if (isCancel(e2bKey)) { cancel("Configuration cancelled."); process.exit(0); }
   if (!e2bKey || (e2bKey as string).trim() === "") e2bKey = existingConfig.e2bApiKey ?? "";
+
+  // OpenSandbox (Fallback)
+  let osKey = await password({
+    message: `OpenSandbox API key ${chalk.dim("(fallback sandbox)")}`,
+    mask: "•",
+  });
+  if (isCancel(osKey)) { cancel("Configuration cancelled."); process.exit(0); }
+  if (!osKey || (osKey as string).trim() === "") osKey = existingConfig.openSandboxApiKey ?? "";
+
+  let osDomain = await text({
+    message: `OpenSandbox Domain ${chalk.dim("(fallback sandbox domain, default: localhost:8080)")}`,
+    placeholder: "localhost:8080",
+    defaultValue: existingConfig.openSandboxDomain ?? "",
+  });
+  if (isCancel(osDomain)) { cancel("Configuration cancelled."); process.exit(0); }
+  if (!osDomain || (osDomain as string).trim() === "") osDomain = existingConfig.openSandboxDomain ?? "";
 
   // Gemini (Security scanning)
   let geminiKey = await password({
@@ -228,6 +244,8 @@ async function runOnboarding(): Promise<JooneConfig> {
     streaming,
     sandboxTemplate: existingConfig.sandboxTemplate,
     e2bApiKey: typeof e2bKey === "string" ? e2bKey : undefined,
+    openSandboxApiKey: typeof osKey === "string" ? osKey : undefined,
+    openSandboxDomain: typeof osDomain === "string" ? osDomain : undefined,
     geminiApiKey: typeof geminiKey === "string" ? geminiKey : undefined,
     valyuApiKey: typeof valyuKey === "string" ? valyuKey : undefined,
     langsmithApiKey: typeof langsmithKey === "string" ? langsmithKey : undefined,
@@ -299,8 +317,13 @@ program
       const { bindSandbox } = await import("../tools/index.js");
 
       const s = spinner();
-      s.start("Initializing E2B Sandbox...");
-      const sandboxManager = new SandboxManager({ template: config.sandboxTemplate });
+      s.start("Initializing Sandbox Environment...");
+      const sandboxManager = new SandboxManager({ 
+        template: config.sandboxTemplate,
+        apiKey: config.e2bApiKey,
+        openSandboxApiKey: config.openSandboxApiKey,
+        openSandboxDomain: config.openSandboxDomain,
+      });
       await sandboxManager.create();
       
       const { FileSync } = await import("../sandbox/sync.js");

@@ -32,9 +32,9 @@ describe("BrowserTool", () => {
   // ─── Test #71: Rejects without sandbox ───
 
   it("throws when sandbox is not active", async () => {
-    await expect(
-      BrowserTool.execute({ action: "navigate", url: "https://example.com" })
-    ).rejects.toThrow(/sandbox/i);
+    const result = await BrowserTool.execute({ action: "navigate", url: "https://example.com" });
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/sandbox/i);
   });
 });
 
@@ -49,7 +49,7 @@ describe("WebSearchTool", () => {
     bindValyuApiKey(undefined);
     const result = await WebSearchTool.execute({ query: "test" });
 
-    expect(result).toMatch(/api key not configured/i);
+    expect(result.content).toMatch(/api key not configured/i);
   });
 
   // ─── Test #73: Schema includes all sources ───
@@ -126,6 +126,14 @@ describe("SkillLoader", () => {
   // ─── Test #76: Project skills override user skills with same name ───
 
   it("project skills override user-level skills with the same name", () => {
+    // Create user-level skill in the mocked home directory (tmpDir)
+    const userSkillsDir = path.join(tmpDir, ".joone", "skills");
+    createSkill(
+      userSkillsDir,
+      "deploy",
+      "---\nname: deploy\ndescription: User deploy\n---\n"
+    );
+
     // Create project-level skill
     const projectSkillsDir = path.join(tmpDir, "skills");
     createSkill(
@@ -134,13 +142,18 @@ describe("SkillLoader", () => {
       "---\nname: deploy\ndescription: Project deploy\n---\n"
     );
 
-    const loader = new SkillLoader(tmpDir);
+    // Pass tmpDir as both projectRoot and userHome
+    const loader = new SkillLoader(tmpDir, tmpDir);
     const skills = loader.discoverSkills();
 
     const deploy = skills.find((s) => s.name === "deploy");
     expect(deploy).toBeDefined();
     expect(deploy!.source).toBe("project");
     expect(deploy!.description).toBe("Project deploy");
+
+    // Ensure we only discovered one deploy skill
+    const deployCount = skills.filter((s) => s.name === "deploy").length;
+    expect(deployCount).toBe(1);
   });
 
   // ─── Test #77: loadSkill reads full content ───
@@ -184,8 +197,8 @@ describe("Skills Tools", () => {
   it("search_skills finds matching skills", async () => {
     const result = await SearchSkillsTool.execute({ query: "deploy" });
 
-    expect(result).toContain("deploy");
-    expect(result).toContain("production");
+    expect(result.content).toContain("deploy");
+    expect(result.content).toContain("production");
   });
 
   // ─── Test #79: load_skill reads full content ───
@@ -193,7 +206,7 @@ describe("Skills Tools", () => {
   it("load_skill returns the full SKILL.md content", async () => {
     const result = await LoadSkillTool.execute({ name: "deploy" });
 
-    expect(result).toContain("## Steps");
+    expect(result.content).toContain("## Steps");
   });
 });
 

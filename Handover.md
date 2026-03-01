@@ -10,8 +10,10 @@ This document serves as a comprehensive handover note for future agents or engin
 - **Module System:** ESM (`"type": "module"`)
 - **Language:** TypeScript (`NodeNext` resolution)
 - **Terminal UI (TUI):** Ink v6 (React for CLI) + Clack (prompts/onboarding)
-- **Sandbox Provider:** E2B
+- **Primary Sandbox:** E2B
+- **Fallback Sandbox:** OpenSandbox (Local Docker)
 - **AI SDKs:** `@langchain/anthropic`, `@langchain/openai`, `@google/genai` (planned/flexible via factory)
+- **Testing:** Vitest (TDD methodology strictly enforced)
 - **Testing:** Vitest (TDD methodology strictly enforced)
 
 ---
@@ -22,9 +24,10 @@ This document serves as a comprehensive handover note for future agents or engin
 
 - **Decision:** Split tool execution between the **Host** machine and the **Sandbox**.
 - **Rationale:** We want the user to see file changes happen live in their IDE (Host), but we strictly do not want to run untrusted shell commands or install random dependencies on the user's machine (Sandbox).
-- **Implementation (`src/tools/router.ts`):**
-  - `HOST_TOOLS`: `read_file`, `write_file`, `search_tools`.
-  - `SANDBOX_TOOLS`: `bash`, `run_tests`, `install_deps`, `security_scan`, `dep_scan`.
+- **Implementation (`src/tools/router.ts` & `src/sandbox/manager.ts`):**
+  - **Host Routing (`HOST_TOOLS`):** `read_file`, `write_file`, `search_tools`.
+  - **Sandbox Routing (`SANDBOX_TOOLS`):** `bash`, `run_tests`, `install_deps`, `security_scan`, `dep_scan`.
+  - **Wrapper Architecture:** The `SandboxManager` uses an `ISandboxWrapper`. It attempts to connect to a primary **E2B** cloud sandbox. If initialization fails (e.g., API key error, network timeout), it gracefully defaults to a robust local **OpenSandbox** deployment (`localhost:8080`).
   - _Safe-by-default logic:_ Any unknown tool request is routed to the sandbox.
 
 ### 2.2 ESM Migration for the TUI
@@ -70,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **82 out of 82 tests are GREEN** across 12 test suites. TypeScript compiles cleanly.
+All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** across 13 test suites. TypeScript compiles cleanly.
 
 ### Completed Milestones
 
@@ -82,6 +85,7 @@ All development follows strict TDD. Currently, **82 out of 82 tests are GREEN** 
 - ✅ **M5: Advanced Optimizations:** Enhanced registry (fuzzy search + `activateTool`), `TokenCounter`, improved `compactHistory`, `ReasoningRouter`.
 - ✅ **M5.5: Browser, Search & Skills:** `BrowserTool` (agent-browser), `WebSearchTool` (@valyu/ai-sdk), `SkillLoader` + `search_skills`/`load_skill` tools.
 - ✅ **M6: Tracing & Refinement:** `SessionTracer` (metrics routing), `TraceAnalyzer` (offline insights), LangSmith env integration, `joone analyze` CLI command.
+- ✅ **M8: OpenSandbox Fallback:** `ISandboxWrapper`, local docker degradation at `localhost:8080`, and documented NFRs (Rate Limits & Budgets).
 
 ### Tool Routing Summary
 

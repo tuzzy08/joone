@@ -10,11 +10,10 @@ interface MessageBubbleProps {
 
 /**
  * Renders a single conversation message with role-based styling.
- * - User messages: right-aligned, cyan accent
- * - Agent messages: left-aligned, green accent
+ * - User messages: cyan accent, labeled "you"
+ * - Agent messages: green accent, labeled "joone"
  * - System messages: centered, dim yellow
- */
-export const MessageBubble: React.FC<MessageBubbleProps> = ({
+ */ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   role,
   content,
 }) => {

@@ -171,12 +171,13 @@ export class SessionTracer {
       fs.mkdirSync(tracesDir, { recursive: true });
     }
 
-    const filePath = path.join(tracesDir, `${this.sessionId}.json`);
+    // Sanitize sessionId to prevent path traversal
+    const safeSessionId = path.basename(this.sessionId);
+    const filePath = path.join(tracesDir, `${safeSessionId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(this.export(), null, 2));
 
     return filePath;
   }
-
   /**
    * Loads a session trace from a JSON file.
    */

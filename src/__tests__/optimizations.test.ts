@@ -32,7 +32,7 @@ describe("Enhanced Tool Registry", () => {
   it("fuzzy search matches tools by description keyword", async () => {
     const result = await SearchToolsTool.execute({ query: "commit" });
 
-    expect(result).toContain("git_commit");
+    expect(result.content).toContain("git_commit");
   });
 
   // ─── Test #57: Fuzzy search matches by name ───
@@ -40,7 +40,7 @@ describe("Enhanced Tool Registry", () => {
   it("fuzzy search matches tools by name", async () => {
     const result = await SearchToolsTool.execute({ query: "grep" });
 
-    expect(result).toContain("grep_search");
+    expect(result.content).toContain("grep_search");
   });
 
   // ─── Test #58: activateTool adds tool to the active set ───
@@ -60,8 +60,8 @@ describe("Enhanced Tool Registry", () => {
   it("ActivateToolTool returns the schema on successful activation", async () => {
     const result = await ActivateToolTool.execute({ name: "git_diff" });
 
-    expect(result).toContain("activated");
-    expect(result).toContain("Schema");
+    expect(result.content).toContain("activated");
+    expect(result.content).toContain("Schema");
     expect(getActivatedTools()).toHaveLength(1);
   });
 
@@ -70,7 +70,7 @@ describe("Enhanced Tool Registry", () => {
   it("ActivateToolTool returns error for unknown tool", async () => {
     const result = await ActivateToolTool.execute({ name: "nonexistent" });
 
-    expect(result).toMatch(/not found/i);
+    expect(result.content).toMatch(/not found/i);
   });
 });
 

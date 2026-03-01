@@ -62,10 +62,10 @@ async function runCacheTest() {
     ));
 
     const response3 = await harness.step(state);
+    state.conversationHistory.push(response3);
     
     console.log(`Response 3: ${response3.content}`);
-    console.log(`Token Usage 3: ${JSON.stringify(response3.response_metadata?.usage, null, 2)}\n`);
-}
+    console.log(`Token Usage 3: ${JSON.stringify(response3.response_metadata?.usage, null, 2)}\n`);}
 
 if (require.main === module) {
     runCacheTest().catch(console.error);

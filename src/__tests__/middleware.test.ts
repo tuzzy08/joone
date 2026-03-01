@@ -34,7 +34,7 @@ describe("MiddlewarePipeline", () => {
       after: (_ctx, r) => { order.push("B:after"); return r; },
     });
 
-    const executeFn = vi.fn(async () => "result");
+    const executeFn = vi.fn(async () => ({ content: "result" }));
     await pipeline.run(makeCtx(), executeFn);
 
     expect(order).toEqual(["A:before", "B:before", "B:after", "A:after"]);
@@ -50,7 +50,7 @@ describe("MiddlewarePipeline", () => {
       before: () => "⚠ Blocked!",
     });
 
-    const executeFn = vi.fn(async () => "should not reach this");
+    const executeFn = vi.fn(async () => ({ content: "should not reach this" }));
     const result = await pipeline.run(makeCtx(), executeFn);
 
     expect(result).toBe("⚠ Blocked!");
@@ -63,10 +63,10 @@ describe("MiddlewarePipeline", () => {
     const pipeline = new MiddlewarePipeline();
     pipeline.use({
       name: "Uppercaser",
-      after: (_ctx, result) => result.toUpperCase(),
+      after: (_ctx, result) => { result.content = result.content.toUpperCase(); return result; },
     });
 
-    const result = await pipeline.run(makeCtx(), async () => "hello");
+    const result = await pipeline.run(makeCtx(), async () => ({ content: "hello" }));
 
     expect(result).toBe("HELLO");
   });
@@ -202,8 +202,9 @@ describe("PreCompletionMiddleware", () => {
       callId: "call-1",
     };
     mw.before(testCtx);
+    mw.after(testCtx, { content: "tests passed", metadata: { exitCode: 0 }, isError: false });
 
-    expect(mw.hasRunTests()).toBe(true);
+    expect(mw.hasPassedTests()).toBe(true);
 
     // Now try completion
     const completeCtx: ToolCallContext = {

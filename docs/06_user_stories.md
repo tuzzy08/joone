@@ -1,4 +1,4 @@
-# User Stories- **US 2.2**: As the system, I want to buffer tool call JSON during streaming until the full call is received, then execute it, so that partial or malformed tool calls don't cause execution errors.- **US 5.1**: As an agent, I want access to core tools (`read_file`, `write_file`, `run_bash_command`) defined statically at the beginning of the session, so that I can immediately perform essential operations without needing to search for basic functionality.
+# User Stories
 
 This document contains the foundational user stories for the Joone agent, organized by Epic. It does not include exhaustive acceptance criteria, but rather serves as a high-level requirements tracker for the core features.
 
@@ -27,7 +27,6 @@ This document contains the foundational user stories for the Joone agent, organi
 
 - **US 4.1**: As a user, I want `write_file` and `read_file` to operate on my host filesystem, so I can see the agent's code changes in my IDE in real-time.
 - **US 4.4**: As the system, I want to create a new E2B sandbox at the start of each agent session and destroy it when the session ends or times out, so that each session has a clean isolated environment and resources are properly released.
-- **US 4.5**: As a developer, I want the tool router to automatically determine whether a tool runs on the host or in the sandbox based on tool type, so that I don't have to manually configure execution contexts for each tool.- **US 4.4**: As the system, I want to create a new E2B sandbox at the start of each agent session and destroy it when the session ends or times out.
 - **US 4.5**: As a developer, I want the tool router to automatically determine whether a tool runs on the host or in the sandbox based on tool type.
 
 ## Epic 5: Tooling & Lazy Loading

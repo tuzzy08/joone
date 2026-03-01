@@ -1,6 +1,6 @@
 import { SandboxManager } from "../sandbox/manager.js";
 import { LazyInstaller } from "../sandbox/bootstrap.js";
-import { DynamicToolInterface } from "./index.js";
+import { DynamicToolInterface, ToolResult } from "./index.js";
 
 // ─── Sandbox + Installer references ─────────────────────────────────────────
 
@@ -13,6 +13,16 @@ export function bindBrowserSandbox(
 ): void {
   _sandboxManager = sandbox;
   _installer = installer;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────────
+
+/**
+ * Escapes a string so it can be safely used as an argument in a Bash shell command.
+ * It wraps the string in single quotes and safely escapes internal single quotes.
+ */
+function escapeBashArg(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
 }
 
 // ─── BrowserTool ────────────────────────────────────────────────────────────────
@@ -60,9 +70,8 @@ export const BrowserTool: DynamicToolInterface = {
       direction: {
         type: "string",
         enum: ["up", "down"],
-        description: "Scroll direction (required for 'scroll')",
-      },
-    },
+        description: "Scroll direction for 'scroll' action (optional, defaults to 'down')",
+      },    },
     required: ["action"],
   },
   execute: async (args: {
@@ -71,9 +80,9 @@ export const BrowserTool: DynamicToolInterface = {
     ref?: string;
     text?: string;
     direction?: string;
-  }) => {
+  }): Promise<ToolResult> => {
     if (!_sandboxManager || !_sandboxManager.isActive()) {
-      throw new Error("Sandbox is not active. Cannot use browser tool.");
+      return { content: "Sandbox is not active. Cannot use browser tool.", isError: true };
     }
 
     // Build the CLI command
@@ -81,8 +90,8 @@ export const BrowserTool: DynamicToolInterface = {
 
     switch (args.action) {
       case "navigate":
-        if (!args.url) return "Error: 'url' is required for navigate action.";
-        command = `agent-browser navigate "${args.url}" 2>&1`;
+        if (!args.url) return { content: "Error: 'url' is required for navigate action.", isError: true };
+        command = `agent-browser navigate ${escapeBashArg(args.url)} 2>&1`;
         break;
 
       case "snapshot":
@@ -90,14 +99,14 @@ export const BrowserTool: DynamicToolInterface = {
         break;
 
       case "click":
-        if (!args.ref) return "Error: 'ref' is required for click action.";
-        command = `agent-browser click "${args.ref}" 2>&1`;
+        if (!args.ref) return { content: "Error: 'ref' is required for click action.", isError: true };
+        command = `agent-browser click ${escapeBashArg(args.ref)} 2>&1`;
         break;
 
       case "type":
-        if (!args.ref) return "Error: 'ref' is required for type action.";
-        if (!args.text) return "Error: 'text' is required for type action.";
-        command = `agent-browser type "${args.ref}" "${args.text}" 2>&1`;
+        if (!args.ref) return { content: "Error: 'ref' is required for type action.", isError: true };
+        if (!args.text) return { content: "Error: 'text' is required for type action.", isError: true };
+        command = `agent-browser type ${escapeBashArg(args.ref)} ${escapeBashArg(args.text)} 2>&1`;
         break;
 
       case "screenshot":
@@ -106,19 +115,23 @@ export const BrowserTool: DynamicToolInterface = {
 
       case "scroll":
         const dir = args.direction || "down";
-        command = `agent-browser scroll ${dir} 2>&1`;
+        command = `agent-browser scroll ${escapeBashArg(dir)} 2>&1`;
         break;
 
       default:
-        return `Error: Unknown action "${args.action}". Use: navigate, snapshot, click, type, screenshot, scroll.`;
+        return { content: `Error: Unknown action "${args.action}". Use: navigate, snapshot, click, type, screenshot, scroll.`, isError: true };
     }
 
     const result = await _sandboxManager.exec(command);
 
     if (result.exitCode !== 0) {
-      return `Browser action failed (exit code ${result.exitCode}):\n${result.stdout}\n${result.stderr}`;
+      return {
+        content: `Browser action failed (exit code ${result.exitCode}):\n${result.stdout}\n${result.stderr}`,
+        metadata: { exitCode: result.exitCode },
+        isError: true
+      };
     }
 
-    return result.stdout || "(no output)";
+    return { content: result.stdout || "(no output)", metadata: { exitCode: result.exitCode }, isError: false };
   },
 };

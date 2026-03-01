@@ -157,6 +157,16 @@ export class ExecutionHarness {
 
             const safeCallId = call.id;
 
+            // Handle malformed args from streaming parse errors
+            if (call.args && call.args._parseError) {
+                this.tracer.recordError({ message: `Failed to parse tool arguments`, tool: call.name });
+                results.push(new ToolMessage({
+                    content: `Error: Failed to parse tool arguments. The JSON provided was malformed:\n${call.args.rawArgs}\nPlease correct the JSON format and try again.`,
+                    tool_call_id: safeCallId
+                }));
+                continue;
+            }
+
             const tool = this.availableTools.find(t => t.name === call.name);
             if (!tool) {
                 this.tracer.recordError({ message: `Tool ${call.name} not found`, tool: call.name });

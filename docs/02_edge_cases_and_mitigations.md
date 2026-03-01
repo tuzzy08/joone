@@ -23,11 +23,29 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
   - _The Edge Case:_ The agent misses a space in a search-and-replace, fails, and tries the exact same edit endlessly.
   - _Mitigation:_ Use `LoopDetectionMiddleware`. If the agent emits identical tool calls 3 times, intercept and inject: _"You have failed this 3 times. Stop trying this approach."_
 - **The "Fake Success" Verification:**
-  - _The Edge Case:_ The agent runs tests, they fail, but the agent hallucinates that the failure is acceptable and marks the task as Done.
-  - _Mitigation:_ The harness must parse terminal exit codes. If `pytest` returns `1`, the harness programmatically blocks the agent from exiting until tests pass.
+  - _The Edge Case:_ The agent runs tests, they fail, but the agent hallucinates that the failure is acceptable and marks the task as Done. Older approaches relied on fragile string parsing (e.g., matching "failed" in output), which could easily be bypassed or confused by test output.
+  - _Mitigation:_ The harness must programmatically parse terminal exit codes. By explicitly surfacing structured tool metadata (e.g., `ToolResult.metadata.exitCode`) from execution sandboxes, the `PreCompletionMiddleware` reliably blocks the agent from exiting if tests don't pass (`exitCode !== 0`).
 - **Tool Schema Amnesia (with Lazy Loading):**
   - _The Edge Case:_ An agent loads a complex tool lazily, uses it once, and then later forgets how to format its JSON schema.
   - _Mitigation:_ If a tool is "discovered", it must remain in the "Messages" context as a system reminder so the schema is preserved.
 - **The "Ghost Tool Call" (Context Desync):**
   - _The Edge Case:_ A model emits a tool call but occasionally forgets to attach a internal `tool_call_id` (this breaks the strict `AIMessage[tool_calls] -> ToolMessage[tool_call_id]` sequencing rules required by modern LangChain/Anthropic/OpenAI APIs). If you forge a fake ID or cast it as a string, the LLM rejects the context on the next turn.
   - _Mitigation:_ The "Soft Fail" approach. Intercept the malformed tool call in the `ExecutionHarness`. Do not execute the tool and do not emit a `ToolMessage`. Instead, emit a corrective `HumanMessage` stating: _"You attempted to call tool X, but didn't provide a tool_call_id. Please try again."_ This prevents context poisoning.
+
+## 3. Security & Execution Edge Cases (Tool Exploits)
+
+- **Command Injection via Malicious Interpolation:**
+  - _The Edge Case:_ Passing user-provided arguments directly into shell commands (e.g., `agent-browser --url "${args.url}"` or `gemini --file "${args.path}"`) allows attackers to escape quotes and execute arbitrary commands in the sandbox (e.g., `url = '"; cat /etc/passwd; "'`).
+  - _Mitigation:_ Use strict Bash parameter escaping. All dynamic strings passed to shell commands are wrapped in single quotes, and any internal single quotes are escaped (`'\\''`).
+- **Host Filesystem Path Traversal (The "Escaped Workspace" Vulnerability):**
+  - _The Edge Case:_ Because `read_file` and `write_file` execute on the host machine to support live IDE syncing, a malicious prompt could instruct the agent to write to `~/.bashrc`, `C:\Windows\System32`, or `/.ssh/id_rsa`, compromising the user's host machine.
+  - _Mitigation:_ Implement strict Workspace Jail boundaries. Before any host I/O operation, the resolved path is evaluated against `process.cwd()`. If the path attempts to escape the root workspace, the tool immediately rejects the call returning a permissions error.
+- **Silently Swallowed CLI Errors:**
+  - _The Edge Case:_ A CLI tool (like OSV-Scanner) crashes due to a configuration error (exit code > 1) and prints an error to `stderr`. If the orchestration layer only checks for `stdout` and swallows non-zero exit codes silently falling back to another tool, the critical error trace is lost.
+  - _Mitigation:_ Enforce strict exit code verification (e.g., `exitCode === 1` means vulnerabilities found) and emit clear warnings with the full `stderr` trace before attempting any fallback strategies.
+- **The "Over-Eager Doom Loop" Reporter:**
+  - _The Edge Case:_ When detecting a doom loop (calling the same tool with identical args continuously), firing an alert during the active iteration causes redundant, spammy issue reports (e.g., reporting loop counts 3, 4, and 5 as separate critical issues).
+  - _Mitigation:_ Track the loop state continuously but defer pushing the `AnalysisIssue` to the report array until the loop is visibly broken by a differing action, or the trace ends.
+- **The "Parallel Tool Expansion" Bug (TUI Memory Corruption):**
+  - _The Edge Case:_ In a Terminal UI rendering loop, executing an array of tool calls _inside_ the UI rendering iteration causes the generated `ToolMessage` array to be appended to the conversation history $N$ times (for $N$ tools), massively inflating context usage with duplicated data.
+  - _Mitigation:_ Decouple execution from rendering. Execute context-blocking tool calls cleanly _once_ outside the loop, sequence the UI renders using a visual delay, and append the final `toolMessages` array to the history exactly once.

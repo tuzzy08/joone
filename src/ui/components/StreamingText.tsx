@@ -24,6 +24,8 @@ export const StreamingText: React.FC<StreamingTextProps> = ({
       return;
     }
 
+    setCursorVisible(true);
+
     const interval = setInterval(() => {
       setCursorVisible((v) => !v);
     }, 500);

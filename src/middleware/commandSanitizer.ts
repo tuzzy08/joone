@@ -20,7 +20,7 @@ export class CommandSanitizerMiddleware implements ToolMiddleware {
     [/rm\s+(-\w*r\w*f\w*|-\w*f\w*r\w*)\s+\/(\*)?(?:\s|$)/, "destructive: rm -rf /"],
     [/mkfs\b/, "destructive: filesystem format"],
     [/\bdd\s+.*of=\/dev\//, "destructive: raw disk write"],
-    [/chmod\s+(-\w+\s+)*777\s+\//, "dangerous: recursive chmod 777 on root"],
+    [/chmod\s+(-\w+\s+)*777\s+\//, "dangerous: chmod 777 on root"],
 
     // Interactive / hanging
     [/\b(vim|vi|nano|emacs|pico)\b/, "interactive: text editor (hangs the sandbox)"],

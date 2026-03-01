@@ -52,9 +52,18 @@ export class FileSync {
     let synced = 0;
 
     for (const [hostPath, sandboxPath] of this.dirtyFiles) {
-      const content = fs.readFileSync(hostPath, "utf-8");
-      await sandbox.uploadFile(sandboxPath, content);
-      synced++;
+      try {
+        const content = fs.readFileSync(hostPath, "utf-8");
+        await sandbox.uploadFile(sandboxPath, content);
+        synced++;
+      } catch (error: any) {
+        if (error.code === "ENOENT") {
+          // File was deleted from the host before it could be synced.
+          // We safely ignore this to prevent crashing the sync loop.
+        } else {
+          console.error(`Error reading ${hostPath} for sync:`, error.message);
+        }
+      }
     }
 
     this.dirtyFiles.clear();

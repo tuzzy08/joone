@@ -3,11 +3,17 @@ import * as path from "node:path";
 import { SandboxManager } from "../sandbox/manager.js";
 import { FileSync } from "../sandbox/sync.js";
 
+export interface ToolResult {
+    content: string;
+    metadata?: Record<string, any>;
+    isError?: boolean;
+}
+
 export interface DynamicToolInterface {
     name: string;
     description: string;
     schema: Record<string, any>;
-    execute: (args: any) => Promise<string> | string;
+    execute: (args: any) => Promise<ToolResult> | ToolResult;
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
@@ -32,6 +38,21 @@ export function bindSandbox(sandbox: SandboxManager, fileSync: FileSync): void {
     _fileSync = fileSync;
 }
 
+/**
+ * Security: Validates that a resolved path is strictly inside the given workspace dir.
+ * Prevents directory traversal attacks from accessing sensitive host files.
+ */
+export function isPathInsideWorkspace(
+    resolvedPath: string,
+    workspaceDir = process.cwd()
+): boolean {
+    const normalizedWorkspace = path.resolve(workspaceDir);
+    // path.relative returns a path relative to the first argument.
+    // If it starts with '..' or is absolute, it means resolvedPath has escaped normalizedWorkspace.
+    const relative = path.relative(normalizedWorkspace, resolvedPath);
+    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
 // ─── BashTool ───────────────────────────────────────────────────────────────────
 // Executes shell commands inside the E2B sandbox.
 // The ToolRouter routes this to SANDBOX — the host machine is never exposed.
@@ -50,7 +71,7 @@ export const BashTool: DynamicToolInterface = {
         },
         required: ["command"],
     },
-    execute: async (args: { command: string }) => {
+    execute: async (args: { command: string }): Promise<ToolResult> => {
         if (!_sandboxManager || !_sandboxManager.isActive()) {
             throw new Error(
                 "Sandbox is not active. Cannot execute bash commands without an active sandbox session."
@@ -65,10 +86,18 @@ export const BashTool: DynamicToolInterface = {
         const result = await _sandboxManager.exec(args.command);
 
         if (result.exitCode !== 0) {
-            return `Command failed (exit code ${result.exitCode}):\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`;
+            return {
+                content: `Command failed (exit code ${result.exitCode}):\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`,
+                metadata: { exitCode: result.exitCode },
+                isError: true
+            };
         }
 
-        return result.stdout || "(no output)";
+        return {
+            content: result.stdout || "(no output)",
+            metadata: { exitCode: result.exitCode },
+            isError: false
+        };
     },
 };
 
@@ -98,45 +127,54 @@ export const ReadFileTool: DynamicToolInterface = {
         },
         required: ["path"],
     },
-    execute: async (args: { path: string; startLine?: number; endLine?: number }) => {
+    execute: async (args: { path: string; startLine?: number; endLine?: number }): Promise<ToolResult> => {
         const filePath = path.resolve(args.path);
+
+        // ── Security Guardrail ──
+        if (!isPathInsideWorkspace(filePath)) {
+            return {
+                content: `Security Error: Access Denied. Cannot read files outside the current project workspace (${process.cwd()}).`,
+                isError: true
+            };
+        }
 
         // ── Check existence ──
         if (!fs.existsSync(filePath)) {
-            return `Error: File not found — ${filePath}`;
+            return {
+                content: `Error: File not found — ${filePath}`,
+                isError: true
+            };
         }
 
         // ── File Size Guardrail ──
         const stat = fs.statSync(filePath);
         if (stat.size > MAX_FILE_SIZE_BYTES) {
-            return (
-                `Error: File is too large (${(stat.size / 1024).toFixed(0)} KB). ` +
-                `Maximum allowed is ${MAX_FILE_SIZE_BYTES / 1024} KB. ` +
-                `Use startLine/endLine to read a specific range, or use bash to run 'head' or 'grep'.`
-            );
+            return {
+                content: `Error: File too large (${Math.round(stat.size / 1024)}KB). Maximum size is 512KB. Use line ranges or grep_search.`,
+                isError: true
+            };
         }
 
-        const content = fs.readFileSync(filePath, "utf-8");
-        const lines = content.split("\n");
+        const fileContent = fs.readFileSync(filePath, "utf-8");
+        const lines = fileContent.split("\n");
 
-        // ── Line range slicing ──
-        if (args.startLine || args.endLine) {
+        if (args.startLine !== undefined || args.endLine !== undefined) {
             const start = Math.max(1, args.startLine ?? 1) - 1;
             const end = Math.min(lines.length, args.endLine ?? lines.length);
             const sliced = lines.slice(start, end);
-            return sliced.map((line, i) => `${start + i + 1}: ${line}`).join("\n");
+            return { content: sliced.map((line, i) => `${start + i + 1}: ${line}`).join("\n") };
         }
 
         // ── Line count guardrail ──
         if (lines.length > MAX_FILE_LINES) {
             const truncated = lines.slice(0, MAX_FILE_LINES);
-            return (
-                truncated.map((line, i) => `${i + 1}: ${line}`).join("\n") +
+            return {
+                content: truncated.map((line, i) => `${i + 1}: ${line}`).join("\n") +
                 `\n\n--- Truncated at ${MAX_FILE_LINES} lines (total: ${lines.length}) ---`
-            );
+            };
         }
 
-        return content;
+        return { content: fileContent };
     },
 };
 
@@ -162,8 +200,16 @@ export const WriteFileTool: DynamicToolInterface = {
         },
         required: ["path", "content"],
     },
-    execute: async (args: { path: string; content: string }) => {
+    execute: async (args: { path: string; content: string }): Promise<ToolResult> => {
         const filePath = path.resolve(args.path);
+
+        // ── Security Guardrail ──
+        if (!isPathInsideWorkspace(filePath)) {
+            return {
+                content: `Security Error: Access Denied. Cannot write files outside the current project workspace (${process.cwd()}).`,
+                isError: true
+            };
+        }
 
         // Create parent directories if needed
         const dir = path.dirname(filePath);
@@ -178,7 +224,7 @@ export const WriteFileTool: DynamicToolInterface = {
             _fileSync.markDirty(filePath);
         }
 
-        return `File written: ${filePath}`;
+        return { content: `File written: ${filePath}` };
     },
 };
 

@@ -75,6 +75,8 @@ export class TraceAnalyzer {
     const toolCalls = this.trace.events.filter((e) => e.type === "tool_call");
 
     let consecutiveCount = 1;
+    let loopToolName: string | null = null;
+
     for (let i = 1; i < toolCalls.length; i++) {
       const prev = toolCalls[i - 1];
       const curr = toolCalls[i];
@@ -84,16 +86,27 @@ export class TraceAnalyzer {
         JSON.stringify(prev.data.args) === JSON.stringify(curr.data.args)
       ) {
         consecutiveCount++;
-        if (consecutiveCount >= 3) {
+        loopToolName = curr.data.name;
+      } else {
+        if (consecutiveCount >= 3 && loopToolName) {
           issues.push({
             severity: "critical",
             category: "loop",
-            message: `Doom-loop detected: "${curr.data.name}" called ${consecutiveCount} times consecutively with identical args.`,
+            message: `Doom-loop detected: "${loopToolName}" called ${consecutiveCount} times consecutively with identical args.`,
           });
         }
-      } else {
         consecutiveCount = 1;
+        loopToolName = null;
       }
+    }
+
+    // Handle loop at end of array
+    if (consecutiveCount >= 3 && loopToolName) {
+      issues.push({
+        severity: "critical",
+        category: "loop",
+        message: `Doom-loop detected: "${loopToolName}" called ${consecutiveCount} times consecutively with identical args.`,
+      });
     }
 
     return issues;

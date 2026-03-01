@@ -22,7 +22,7 @@ export const DeferredToolsDB: Record<string, DynamicToolInterface> = {
       properties: { message: { type: "string" } },
       required: ["message"],
     },
-    execute: async (args) => `Committed with message: ${args.message}`,
+    execute: async (args) => ({ content: `Committed with message: ${args.message}` }),
   },
   git_diff: {
     name: "git_diff",
@@ -37,8 +37,7 @@ export const DeferredToolsDB: Record<string, DynamicToolInterface> = {
         },
       },
     },
-    execute: async (args) =>
-      `Diff for: ${args.target || "working directory"}`,
+    execute: async (args) => ({ content: `Diff for: ${args.target || "working directory"}` }),
   },
   git_log: {
     name: "git_log",
@@ -52,8 +51,7 @@ export const DeferredToolsDB: Record<string, DynamicToolInterface> = {
         },
       },
     },
-    execute: async (args) =>
-      `Showing last ${args.count || 10} commits.`,
+    execute: async (args) => ({ content: `Showing last ${args.count || 10} commits.` }),
   },
   grep_search: {
     name: "grep_search",
@@ -68,8 +66,7 @@ export const DeferredToolsDB: Record<string, DynamicToolInterface> = {
       },
       required: ["query"],
     },
-    execute: async (args) =>
-      `Search results for '${args.query}'`,
+    execute: async (args) => ({ content: `Search results for '${args.query}'` }),
   },
   list_dir: {
     name: "list_dir",
@@ -82,8 +79,7 @@ export const DeferredToolsDB: Record<string, DynamicToolInterface> = {
       },
       required: ["path"],
     },
-    execute: async (args) =>
-      `Directory listing for: ${args.path}`,
+    execute: async (args) => ({ content: `Directory listing for: ${args.path}` }),
   },
 };
 
@@ -154,17 +150,18 @@ export const SearchToolsTool: DynamicToolInterface = {
     );
 
     if (matches.length === 0) {
-      return `No tools found matching '${args.query}'. Available categories: git, file, search.`;
+      return { content: `No tools found matching '${args.query}'. Available categories: git, file, search.` };
     }
 
     const descriptions = matches.map(
       (t) => `- **${t.name}**: ${t.description}`
     );
 
-    return (
-      `Found ${matches.length} tool(s):\n${descriptions.join("\n")}\n\n` +
-      `To use a tool, call activate_tool with its name.`
-    );
+    return {
+      content:
+        `Found ${matches.length} tool(s):\n${descriptions.join("\n")}\n\n` +
+        `To use a tool, call activate_tool with its name.`
+    };
   },
 };
 
@@ -185,13 +182,17 @@ export const ActivateToolTool: DynamicToolInterface = {
     const tool = activateTool(args.name);
 
     if (!tool) {
-      return `Error: Tool '${args.name}' not found in the registry. Use search_tools to see available tools.`;
+      return {
+        content: `Error: Tool '${args.name}' not found in the registry. Use search_tools to see available tools.`,
+        isError: true
+      };
     }
 
-    return (
-      `✓ Tool '${args.name}' activated.\n` +
-      `Schema: ${JSON.stringify(tool.schema, null, 2)}\n` +
-      `You can now call it directly.`
-    );
+    return {
+      content:
+        `✓ Tool '${args.name}' activated.\n` +
+        `Schema: ${JSON.stringify(tool.schema, null, 2)}\n` +
+        `You can now call it directly.`
+    };
   },
 };

@@ -22,10 +22,12 @@ import { SkillMeta } from "./types.js";
  */
 export class SkillLoader {
   private projectRoot: string;
+  private userHome: string;
   private cachedSkills: SkillMeta[] | null = null;
 
-  constructor(projectRoot?: string) {
+  constructor(projectRoot?: string, userHome?: string) {
     this.projectRoot = projectRoot ?? process.cwd();
+    this.userHome = userHome ?? os.homedir();
   }
 
   /**
@@ -33,7 +35,7 @@ export class SkillLoader {
    * Project-level directories come first (higher priority).
    */
   getDiscoveryPaths(): { path: string; source: "project" | "user" }[] {
-    const home = os.homedir();
+    const home = this.userHome;
 
     return [
       // Project-level (highest priority)

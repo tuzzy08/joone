@@ -8,7 +8,7 @@ describe("ReadFileTool", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "joone-tools-test-"));
+    tmpDir = fs.mkdtempSync(path.join(process.cwd(), ".joone-tools-test-"));
   });
 
   afterEach(() => {
@@ -23,7 +23,7 @@ describe("ReadFileTool", () => {
 
     const result = await ReadFileTool.execute({ path: filePath });
 
-    expect(result).toBe("Hello, world!");
+    expect(result.content).toBe("Hello, world!");
   });
 
   // ─── Test #28: Returns error for non-existent file ───
@@ -33,7 +33,7 @@ describe("ReadFileTool", () => {
       path: path.join(tmpDir, "nope.txt"),
     });
 
-    expect(result).toMatch(/not found/i);
+    expect(result.content).toMatch(/not found/i);
   });
 
   // ─── Test #29: File size guardrail rejects files over 512KB ───
@@ -46,8 +46,8 @@ describe("ReadFileTool", () => {
 
     const result = await ReadFileTool.execute({ path: filePath });
 
-    expect(result).toMatch(/too large/i);
-    expect(result).toMatch(/512/);
+    expect(result.content).toMatch(/too large/i);
+    expect(result.content).toMatch(/512/);
   });
 
   // ─── Test #30: Line range slicing works ───
@@ -63,11 +63,11 @@ describe("ReadFileTool", () => {
       endLine: 7,
     });
 
-    expect(result).toContain("5: Line 5");
-    expect(result).toContain("6: Line 6");
-    expect(result).toContain("7: Line 7");
-    expect(result).not.toContain("4: Line 4");
-    expect(result).not.toContain("8: Line 8");
+    expect(result.content).toContain("5: Line 5");
+    expect(result.content).toContain("6: Line 6");
+    expect(result.content).toContain("7: Line 7");
+    expect(result.content).not.toContain("4: Line 4");
+    expect(result.content).not.toContain("8: Line 8");
   });
 
   // ─── Test #31: Line count guardrail truncates long files ───
@@ -80,10 +80,28 @@ describe("ReadFileTool", () => {
 
     const result = await ReadFileTool.execute({ path: filePath });
 
-    expect(result).toMatch(/truncated at 2000 lines/i);
-    expect(result).toContain("1: L1");
-    expect(result).toContain("2000: L2000");
-    expect(result).not.toContain("2001: L2001");
+    expect(result.content).toMatch(/truncated at 2000 lines/i);
+    expect(result.content).toContain("1: L1");
+    expect(result.content).toContain("2000: L2000");
+    expect(result.content).not.toContain("2001: L2001");
+  });
+
+  // ─── Test #X: Security Guardrail Blocks Outside Files ───
+
+  it("blocks reading files outside the project workspace", async () => {
+    // Create a file in the OS tmp directory (guaranteed outside project workspace)
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "joone-outside-"));
+    const filePath = path.join(outsideDir, "secret.txt");
+    fs.writeFileSync(filePath, "secret token", "utf-8");
+
+    try {
+      const result = await ReadFileTool.execute({ path: filePath });
+      expect(result.isError).toBe(true);
+      expect(result.content).toMatch(/Security Error: Access Denied/i);
+      expect(result.content).toMatch(/outside the current project workspace/i);
+    } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -91,7 +109,7 @@ describe("WriteFileTool", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "joone-write-test-"));
+    tmpDir = fs.mkdtempSync(path.join(process.cwd(), ".joone-write-test-"));
   });
 
   afterEach(() => {
@@ -108,7 +126,7 @@ describe("WriteFileTool", () => {
       content: "const x = 42;",
     });
 
-    expect(result).toMatch(/file written/i);
+    expect(result.content).toMatch(/file written/i);
     expect(fs.readFileSync(filePath, "utf-8")).toBe("const x = 42;");
   });
 
@@ -122,7 +140,7 @@ describe("WriteFileTool", () => {
       content: "export {}",
     });
 
-    expect(result).toMatch(/file written/i);
+    expect(result.content).toMatch(/file written/i);
     expect(fs.existsSync(filePath)).toBe(true);
   });
 });

@@ -84,6 +84,7 @@ graph TD
 
 4. **Middleware Orchestrator** (`src/middleware/`):
    - Implements the Observer pattern over the `on_tool_call` and `on_submit` events.
+   - Operates on a structured `ToolResult` interface (`{ content, metadata, isError }`) to robustly pass execution metadata (like process exit codes) through the pipeline without brittle string parsing.
    - Can _intercept_ or _modify_ a tool request before it hits the tools.
    - Can _inject_ `<system-reminder>` messages back to the Execution Engine.
 

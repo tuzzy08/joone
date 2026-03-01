@@ -1,4 +1,4 @@
-import { DynamicToolInterface } from "./index.js";
+import { DynamicToolInterface, ToolResult } from "./index.js";
 
 /**
  * Web Search Tool — wraps the Valyu AI Search SDK.
@@ -49,12 +49,14 @@ export const WebSearchTool: DynamicToolInterface = {
     query: string;
     source?: string;
     maxResults?: number;
-  }) => {
+  }): Promise<ToolResult> => {
     if (!_valyuApiKey) {
-      return (
-        "Error: Valyu API key not configured.\n" +
-        'Run `joone config` and set your Valyu API key, or add "valyuApiKey" to ~/.joone/config.json.'
-      );
+      return {
+        content:
+          "Error: Valyu API key not configured.\n" +
+          'Run `joone config` and set your Valyu API key, or add "valyuApiKey" to ~/.joone/config.json.',
+        isError: true
+      };
     }
 
     const source = args.source ?? "web";
@@ -106,12 +108,15 @@ export const WebSearchTool: DynamicToolInterface = {
           });
           break;
         default:
-          return `Error: Unknown source "${source}". Use: web, papers, finance, patents, sec, companies.`;
+          return {
+            content: `Error: Unknown source "${source}". Use: web, papers, finance, patents, sec, companies.`,
+            isError: true
+          };
       }
 
       // Format results for the LLM
       if (!results || !results.results || results.results.length === 0) {
-        return `No results found for "${args.query}" in ${source} source.`;
+        return { content: `No results found for "${args.query}" in ${source} source.` };
       }
 
       const formatted = results.results
@@ -121,15 +126,17 @@ export const WebSearchTool: DynamicToolInterface = {
         )
         .join("\n\n");
 
-      return `Search results for "${args.query}" (${source}):\n\n${formatted}`;
+      return { content: `Search results for "${args.query}" (${source}):\n\n${formatted}` };
     } catch (error: any) {
-      if (error.code === "MODULE_NOT_FOUND") {
-        return (
-          "Error: @valyu/ai-sdk is not installed.\n" +
-          "Run: npm install @valyu/ai-sdk"
-        );
+      if (error.code === "ERR_MODULE_NOT_FOUND" || error.code === "MODULE_NOT_FOUND") {
+        return {
+          content:
+            "Error: @valyu/ai-sdk is not installed.\n" +
+            "Run: npm install @valyu/ai-sdk",
+          isError: true
+        };
       }
-      return `Search error: ${error.message}`;
+      return { content: `Search error: ${error.message}`, isError: true };
     }
   },
 };

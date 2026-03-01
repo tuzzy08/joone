@@ -15,6 +15,10 @@ export interface JooneConfig {
   sandboxTemplate?: string;
   /** E2B API key for sandbox provisioning. */
   e2bApiKey?: string;
+  /** OpenSandbox API key for sandbox fallback provisioning. */
+  openSandboxApiKey?: string;
+  /** OpenSandbox API Domain for fallback. */
+  openSandboxDomain?: string;
   /** Gemini API key for SecurityScanTool (Gemini CLI inside sandbox). */
   geminiApiKey?: string;
   /** Valyu API key for web search. */

@@ -122,6 +122,10 @@ export const App: React.FC<AppProps> = ({
 
       // Handle Tools
       if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+        // Execute all tool calls once
+        const toolMessages = await harness.executeToolCalls(aiResponse);
+
+        // Update UI sequentially for each tool call
         for (const call of aiResponse.tool_calls) {
           setActiveToolCall({
             name: call.name,
@@ -129,10 +133,8 @@ export const App: React.FC<AppProps> = ({
             status: "running",
           });
 
-          // Hacky execution just for the active tool rendering flow
-          // The ExecutionHarness natively supports executing all at once, but we want
-          // sequential UI updates here. For now, execute all under the hood.
-          const toolMessages = await harness.executeToolCalls(aiResponse);
+          // Brief delay to show running state
+          await new Promise((resolve) => setTimeout(resolve, 300));
 
           setActiveToolCall({
             name: call.name,
@@ -143,10 +145,10 @@ export const App: React.FC<AppProps> = ({
                 ? "Tool execution completed."
                 : "No output.",
           });
-
-          // Add tool results to history
-          nextHistory = [...nextHistory, ...toolMessages];
         }
+
+        // Add tool results to history once
+        nextHistory = [...nextHistory, ...toolMessages];
 
         // Wait a sec so user sees the success state
         await new Promise((resolve) => setTimeout(resolve, 800));
