@@ -7,6 +7,7 @@ import { MiddlewarePipeline } from "../middleware/pipeline.js";
 import { ToolCallContext } from "../middleware/types.js";
 import { SessionTracer } from "../tracing/sessionTracer.js";
 import { countMessageTokens } from "./tokenCounter.js";
+import { SessionStore } from "./sessionStore.js";
 
 export interface StreamStepOptions {
     /** Called for each text token received from the stream. */
@@ -19,6 +20,10 @@ export class ExecutionHarness {
     private availableTools: DynamicToolInterface[];
     private pipeline: MiddlewarePipeline;
     public tracer: SessionTracer;
+    private sessionStore: SessionStore;
+    public sessionId: string;
+    private provider: string;
+    private model: string;
     
     /**
      * Initializes the harness with a pre-configured, tool-bound LLM instance.
@@ -28,13 +33,20 @@ export class ExecutionHarness {
         boundLlm: Runnable<any, AIMessageChunk> | BaseChatModel,
         tools: DynamicToolInterface[] = [],
         pipeline?: MiddlewarePipeline,
-        tracer?: SessionTracer
+        tracer?: SessionTracer,
+        provider: string = "unknown",
+        model: string = "unknown",
+        sessionId?: string
     ) {
         this.llm = boundLlm;
         this.promptBuilder = new CacheOptimizedPromptBuilder();
         this.availableTools = tools;
         this.pipeline = pipeline ?? new MiddlewarePipeline();
         this.tracer = tracer ?? new SessionTracer();
+        this.sessionStore = new SessionStore();
+        this.sessionId = sessionId ?? this.tracer.getSessionId();
+        this.provider = provider;
+        this.model = model;
     }
 
     /**
@@ -56,6 +68,7 @@ export class ExecutionHarness {
             duration: Date.now() - start
         });
         
+        await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
         return response as AIMessage;
     }
 
@@ -129,6 +142,7 @@ export class ExecutionHarness {
             duration: Date.now() - start
         });
 
+        await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
         return result;
     }
 
@@ -136,7 +150,7 @@ export class ExecutionHarness {
      * Executes tool calls from an AI response, routing through the middleware pipeline.
      * Each call passes through all registered before-hooks, then the tool, then after-hooks.
      */
-    public async executeToolCalls(aiMessage: AIMessage): Promise<(ToolMessage | HumanMessage)[]> {
+    public async executeToolCalls(aiMessage: AIMessage, state: ContextState): Promise<(ToolMessage | HumanMessage)[]> {
         const results: (ToolMessage | HumanMessage)[] = [];
         
         if (!aiMessage.tool_calls || aiMessage.tool_calls.length === 0) {
@@ -216,6 +230,10 @@ export class ExecutionHarness {
                 }));
             }
         }
+
+        // Add the tool results to the state immediately before saving
+        state.conversationHistory.push(...results);
+        await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
 
         return results;
     }

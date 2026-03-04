@@ -48,4 +48,21 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
   - _Mitigation:_ Track the loop state continuously but defer pushing the `AnalysisIssue` to the report array until the loop is visibly broken by a differing action, or the trace ends.
 - **The "Parallel Tool Expansion" Bug (TUI Memory Corruption):**
   - _The Edge Case:_ In a Terminal UI rendering loop, executing an array of tool calls _inside_ the UI rendering iteration causes the generated `ToolMessage` array to be appended to the conversation history $N$ times (for $N$ tools), massively inflating context usage with duplicated data.
-  - _Mitigation:_ Decouple execution from rendering. Execute context-blocking tool calls cleanly _once_ outside the loop, sequence the UI renders using a visual delay, and append the final `toolMessages` array to the history exactly once.
+
+## 4. Persistent Session Edge Cases (State Management)
+
+- **File System Drift (Host Desync):**
+  - _The Edge Case:_ The agent edits a file, the session is paused. A human edits the file externally before the session is resumed. The agent resumes, unaware of the external edits, and attempts a line-based replacement that corrupts the file.
+  - _Mitigation:_ `SessionResumer` explicitly logs `mtime` file stats. Upon resumption, it flags recently modified workspace files and injects a "Wakeup Prompt" forcing the LLM to diff or re-read the file before acting.
+- **Sandbox Ephemerality (The Amnesia Problem):**
+  - _The Edge Case:_ A session running a background Express server in a cloud sandbox on Friday is resumed on Monday. The cloud provider killed the idle VM. The new VM lacks the running server, but the LLM’s context history believes it is still running.
+  - _Mitigation:_ Sandboxes are treated strictly statelessly. Upon string resumption, the agent is injected with a system message that the sandbox was recycled and it must manually restart required daemons/dev-servers.
+- **"Mid-Breath" Interruption State (Corrupt Serialization):**
+  - _The Edge Case:_ A forced exit (`SIGINT`/Power Loss) occurs exactly while the agent stream is halfway through emitting a JSON tool call chunk, serializing a broken `AIMessage` into history.
+  - _Mitigation:_ The `SessionStore` must only trigger a `saveSession()` at strict execution boundaries (e.g. after a complete LLM generation cycle or successfully parsed CLI execution), guaranteeing invalid mid-stream JSON chunks never touch the disk.
+- **Context Overflow (The Infinite Chat Log):**
+  - _The Edge Case:_ A persistent session spanning weeks scales the context past 200k tokens, hitting API limits and exponentially inflating the per-turn token costs.
+  - _Mitigation:_ Compaction is forced _before_ disk serialization. The session stringizes and compresses turns older than $N$ iterations into a dense system summary block before writing to `.jsonl`.
+- **Provider/Model Switching Mid-Task:**
+  - _The Edge Case:_ Starting a complex reasoning loop with Opus, pausing, and resuming with a lightweight local model like Llama 3 8B. The history is filled with complex schema usages that confused the smaller model.
+  - _Mitigation:_ Serialize the `.jsonl` lines with `provider/model` metadata blocks. Upon resumption, the CLI explicitly warns if a provider downgrade is detected.

@@ -4,13 +4,18 @@ _This document serves as a living changelog and status board. Any human or agent
 
 ---
 
-## Current Status: Milestone 7 (Testing & Evaluations)
+## Current Status
 
-### What's Pending NEXT:
+- [x] Milestone 6: Tracing & Refinement
+- [x] Milestone 7: Testing & Evaluations (TDD - Ongoing)
+- [x] Milestone 8: OpenSandbox Fallback & NFRs
+- [x] Milestone 9: Persistent Sessions
 
-1. **Milestone 7 Evals**: Hook LangSmith datasets to ExecutionHarness for regression testing.
-2. **Dataset CI**: Build `joone eval` CLI command to assert Cache Hit Rate > 90% and Cost < $X.
-3. **Security Tier 2 & 3 (Planned)**: OS Keychain and encrypted config.
+## Next Steps
+
+1.  **Milestone 7 Evals**: Hook LangSmith datasets to ExecutionHarness for regression testing.
+2.  **Dataset CI**: Build `joone eval` CLI command to assert Cache Hit Rate > 90% and Cost < $X.
+3.  **Security Tier 2 & 3 (Planned)**: OS Keychain and encrypted config.
 
 ---
 
@@ -127,10 +132,14 @@ _This document serves as a living changelog and status board. Any human or agent
 - **CLI Command** (`src/cli/index.ts`): Added `joone analyze [sessionId]` to read trace files and print the offline analysis report beautifully.
 - **Tests**: 91/91 GREEN across 13 suites.
 
-### 2026-03-01: Milestone 8 — OpenSandbox Fallback & NFRs (COMPLETE)
+### 2026-03-01: Milestone 8 & Milestone 9 Completed!
+
+The agent now supports robust **Persistent Sessions** allowing users to pause/resume tasks. It uses highly optimized JSONL appending and automatically detects Host File System Drift when waking up. Furthermore, it supports automatic fallbacks to OpenSandbox when the primary cloud sandbox (E2B) is unavailable!
 
 - **SandboxManager (`ISandboxWrapper`)**: Refactored the core sandbox execution system to support multiple backends securely. Created `E2BSandboxWrapper` and `OpenSandboxWrapper`.
 - **Graceful Degradation**: If E2B fails to initialize (e.g. from a network error or bad API key), the agent automatically catches the error and degrades instantly to a local Docker `OpenSandbox` container on `localhost:8080`.
+- **SessionStore & SessionResumer**: Implemented a highly optimized JSONL-based `SessionStore` (`src/core/sessionStore.ts`) for persistent session logging and `SessionResumer` (`src/core/sessionResumer.ts`) for rehydrating agent state.
+- **Host File System Drift Detection**: `SessionResumer` now automatically detects changes in the host file system since the last session save and prompts the user for reconciliation.
 - **Config & CLI**: Updated `JooneConfig`, `loadConfig`/`saveConfig`, and the `joone config` Clack onboarding wizard to optionally prompt for `OpenSandbox API key` and `Domain`.
 - **NFRs Documented**: Formally established architectural standards in `docs/05_prd.md` for Error Handling (Fallback), Rate Limiting (Budgets & Loop Breakers), Authentication (CLI keys), and Telemetry Data Retention (Local JSONs rotated at 30 days — 100% private).
 - **Tests**: 95/95 GREEN tests ensuring the sandbox layer abstraction natively handles API mappings without breaking `BashTool`.

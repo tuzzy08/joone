@@ -123,7 +123,10 @@ export const App: React.FC<AppProps> = ({
       // Handle Tools
       if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
         // Execute all tool calls once
-        const toolMessages = await harness.executeToolCalls(aiResponse);
+        const toolMessages = await harness.executeToolCalls(
+          aiResponse,
+          currentState,
+        );
 
         // Update UI sequentially for each tool call
         for (const call of aiResponse.tool_calls) {

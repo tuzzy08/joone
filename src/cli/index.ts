@@ -27,6 +27,8 @@ import { LoopDetectionMiddleware } from "../middleware/loopDetection.js";
 import { CommandSanitizerMiddleware } from "../middleware/commandSanitizer.js";
 import { PreCompletionMiddleware } from "../middleware/preCompletion.js";
 import { ExecutionHarness } from "../core/agentLoop.js";
+import { SessionStore } from "../core/sessionStore.js";
+import { SessionResumer } from "../core/sessionResumer.js";
 
 const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 
@@ -279,6 +281,7 @@ program
   .command("start", { isDefault: true })
   .description("Start a new Joone agent session")
   .option("--no-stream", "Disable streaming output")
+  .option("-r, --resume <sessionId>", "Resume a previous session by ID")
   .action(async (options) => {
     let config = loadConfig(CONFIG_PATH);
 
@@ -337,16 +340,36 @@ program
       const { CORE_TOOLS } = await import("../tools/index.js");
       const tools = [...CORE_TOOLS] as import("../tools/index.js").DynamicToolInterface[];
       
-      const harness = new ExecutionHarness(model, tools, pipeline, tracer);
+      let initialState;
+      let sessionId: string | undefined = undefined;
 
-      const initialState = {
-        globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
+      if (options.resume) {
+        const s = spinner();
+        s.start(`Loading session ${chalk.bold(options.resume)}...`);
+        const store = new SessionStore();
+        try {
+          const payload = await store.loadSession(options.resume);
+          const resumer = new SessionResumer(process.cwd());
+          initialState = resumer.prepareForResume(payload);
+          sessionId = options.resume;
+          s.stop(`Session resumed`);
+        } catch (e: any) {
+          s.stop(`Failed to load session`);
+          console.error(chalk.red(`\n  ✗ ${e.message}\n`));
+          process.exit(1);
+        }
+      } else {
+        initialState = {
+          globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
 You run in a hybrid environment: you have read/write access to the host machine for code edits, but all code execution, testing, and dependency installation MUST happen in the isolated E2B sandbox for safety.
 Always use 'bash' to run terminal commands. Never read or write outside the current project directory unless explicitly requested.`,
-        projectMemory: "No project context loaded yet.",
-        sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
-        conversationHistory: []
-      };
+          projectMemory: "No project context loaded yet.",
+          sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
+          conversationHistory: []
+        };
+      }
+
+      const harness = new ExecutionHarness(model, tools, pipeline, tracer, config.provider, config.model, sessionId);
 
       const { render } = await import("ink");
       const React = await import("react");
@@ -374,6 +397,34 @@ Always use 'bash' to run terminal commands. Never read or write outside the curr
         console.error(chalk.red(`\n  ✗ ${error.message}\n`));
       }
       process.exit(1);
+    }
+  });
+
+// ─── joone sessions ────────────────────────────────────────────────────────────
+
+program
+  .command("sessions")
+  .description("List all persistent sessions available for resumption")
+  .action(async () => {
+    const store = new SessionStore();
+    const sessions = await store.listSessions();
+
+    if (sessions.length === 0) {
+      console.log(chalk.dim("\n  No saved sessions found.\n"));
+      return;
+    }
+
+    console.log(chalk.bold("\n  Recent Sessions:"));
+    console.log(chalk.dim("  ─────────────────────────────────────────────────────────"));
+    
+    for (const session of sessions) {
+      const date = new Date(session.lastSavedAt).toLocaleString();
+      console.log(
+        `  ${chalk.cyan(session.sessionId)} ` + 
+        chalk.dim(`[${date}] `) + 
+        chalk.grey(`(${session.model})\n`) +
+        `    ↳ ${chalk.white(session.description)}\n`
+      );
     }
   });
 
@@ -418,6 +469,151 @@ program
       console.log(TraceAnalyzer.formatReport(report));
     } catch (e: any) {
       console.error(chalk.red(`\n  ✗ Error analyzing trace: ${e.message}\n`));
+      process.exit(1);
+    }
+  });
+
+// ─── joone eval ────────────────────────────────────────────────────────────────
+
+program
+  .command("eval")
+  .description("Run automated offline evaluation against the baseline LangSmith dataset")
+  .action(async () => {
+    let config = loadConfig(CONFIG_PATH);
+
+    if (!config.langsmithApiKey) {
+      console.error(chalk.red("\n  ✗ LangSmith API key is missing. Run `joone config` to set it.\n"));
+      process.exit(1);
+    }
+
+    tryEnableLangSmithFromConfig(config);
+
+    console.log(chalk.cyan("\n  ◆ joone evals") + chalk.dim(` (Model: ${config.model})\n`));
+
+    try {
+      const { evaluate } = await import("langsmith/evaluation");
+      const { ensureBaselineDataset } = await import("../evals/dataset.js");
+      const { 
+        successEvaluator, 
+        cacheEfficiencyEvaluator, 
+        filePresenceEvaluator 
+      } = await import("../evals/evaluator.js");
+
+      const s = spinner();
+      s.start("Verifying baseline dataset...");
+      const datasetName = await ensureBaselineDataset();
+      s.stop(`Dataset verified: ${chalk.white(datasetName)}`);
+
+      const model = await createModel(config);
+      const pipeline = new MiddlewarePipeline();
+      pipeline.use(new LoopDetectionMiddleware(3));
+      pipeline.use(new CommandSanitizerMiddleware());
+      const tracer = new SessionTracer();
+      
+      const { bindSandbox, CORE_TOOLS } = await import("../tools/index.js");
+      const tools = [...CORE_TOOLS] as import("../tools/index.js").DynamicToolInterface[];
+
+      s.start("Running evaluations across dataset (this may take a few minutes)...");
+      
+      // We define a target function that the generic `evaluate` engine will call for each example
+      const agentTargetFn = async (inputs: Record<string, any>) => {
+        const runTracer = new SessionTracer();
+        const harness = new ExecutionHarness(model, tools, pipeline, runTracer);
+
+        // Initialize an empty sandbox just for this run
+        const sandboxManager = new SandboxManager({ 
+          template: config.sandboxTemplate,
+          apiKey: config.e2bApiKey,
+          openSandboxApiKey: config.openSandboxApiKey,
+          openSandboxDomain: config.openSandboxDomain,
+        });
+        await sandboxManager.create();
+        const { FileSync } = await import("../sandbox/sync.js");
+        const fileSync = new FileSync(process.cwd());
+        bindSandbox(sandboxManager, fileSync);
+
+        const { HumanMessage, AIMessage, ToolMessage } = await import("@langchain/core/messages");
+        
+        let conversationHistory: any[] = [
+          new HumanMessage(inputs.instruction)
+        ];
+
+        let finalOutput = "";
+        let turnCount = 0;
+        const MAX_TURNS = 15; // Anti-doom-loop for evals
+        
+        try {
+          while (turnCount < MAX_TURNS) {
+            turnCount++;
+            const state = {
+              globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
+You run in a hybrid environment: you have read/write access to the host machine for code edits, but all code execution, testing, and dependency installation MUST happen in the isolated E2B sandbox for safety.
+Always use 'bash' to run terminal commands. Never read or write outside the current project directory unless explicitly requested.`,
+              projectMemory: "Evaluation run.",
+              sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
+              conversationHistory
+            };
+
+            const response = await harness.step(state);
+            conversationHistory.push(response);
+
+            if (response.content && typeof response.content === "string") {
+              finalOutput += response.content + "\n";
+            }
+
+            if (!response.tool_calls || response.tool_calls.length === 0) {
+              break; // Task complete
+            }
+
+            const toolResults = await harness.executeToolCalls(response, state);
+            conversationHistory.push(...toolResults);
+          }
+        } catch (e: any) {
+          await sandboxManager.destroy();
+          throw e; // LangSmith catches this for the error evaluation
+        }
+
+        // Gather metrics
+        const summary = runTracer.getSummary();
+        const metrics = {
+          promptTokens: summary.promptTokens,
+          completionTokens: summary.completionTokens,
+          cacheCreationTokens: summary.promptTokens * (summary.cacheHitRate), // LangChain doesn't expose explicit creation tokens directly yet, estimating for eval.
+          cacheReadTokens: summary.promptTokens * summary.cacheHitRate,
+          totalTokens: summary.totalTokens,
+        };
+
+        // Check sandbox for uploaded/created files before ripping it down
+        let fileManifest: string[] = [];
+        try {
+          const result = await sandboxManager.exec(`find /workspace -type f`);
+          if (result.stdout) {
+             fileManifest = result.stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
+          }
+        } catch {
+          // Ignore, fallback to empty array
+        }
+
+        await sandboxManager.destroy();
+
+        return {
+          finalOutput,
+          metrics,
+          fileManifest,
+        };
+      };
+
+      const results = await evaluate(agentTargetFn, {
+        data: datasetName,
+        evaluators: [successEvaluator, cacheEfficiencyEvaluator, filePresenceEvaluator],
+        experimentPrefix: `joone-eval-${config.model.split('/').pop()}`,
+      });
+
+      s.stop("Evaluations completed!");
+      // LangSmith automatically prints the web URL to the interactive results dashboard here.
+      
+    } catch (e: any) {
+      console.error(chalk.red(`\n  ✗ Evaluation failed: ${e.message}\n`));
       process.exit(1);
     }
   });
