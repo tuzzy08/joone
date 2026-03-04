@@ -6,10 +6,16 @@ import { StatusBar } from "./components/StatusBar.js";
 import { MessageBubble } from "./components/MessageBubble.js";
 import { StreamingText } from "./components/StreamingText.js";
 import { ToolCallPanel, ToolCallStatus } from "./components/ToolCallPanel.js";
+import { HITLPrompt } from "./components/HITLPrompt.js";
 import { ExecutionHarness } from "../core/agentLoop.js";
 import { ContextState } from "../core/promptBuilder.js";
 import { countMessageTokens } from "../core/tokenCounter.js";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
+import {
+  HITLBridge,
+  HITLQuestion,
+  HITLPermissionRequest,
+} from "../hitl/bridge.js";
 
 export interface Message {
   role: "user" | "agent" | "system";
@@ -58,6 +64,38 @@ export const App: React.FC<AppProps> = ({
 
   // Core Engine State
   const [contextState, setContextState] = useState<ContextState>(initialState);
+
+  // HITL State
+  const [hitlQuestion, setHitlQuestion] = useState<HITLQuestion | undefined>(
+    undefined,
+  );
+  const [hitlPermission, setHitlPermission] = useState<
+    HITLPermissionRequest | undefined
+  >(undefined);
+
+  // Listen for HITL events from the bridge
+  useEffect(() => {
+    const bridge = HITLBridge.getInstance();
+
+    const onQuestion = (q: HITLQuestion) => setHitlQuestion(q);
+    const onPermission = (p: HITLPermissionRequest) => setHitlPermission(p);
+
+    bridge.on("question", onQuestion);
+    bridge.on("permission", onPermission);
+
+    // Clear prompts when resolved
+    const origResolve = bridge.resolveAnswer.bind(bridge);
+    bridge.resolveAnswer = (id: string, answer: string) => {
+      origResolve(id, answer);
+      setHitlQuestion(undefined);
+      setHitlPermission(undefined);
+    };
+
+    return () => {
+      bridge.off("question", onQuestion);
+      bridge.off("permission", onPermission);
+    };
+  }, []);
 
   // StatusBar Metrics
   const [startTime] = useState(Date.now());
@@ -231,8 +269,12 @@ export const App: React.FC<AppProps> = ({
         </Box>
       )}
 
-      {/* Interactive Prompt Array */}
-      {!isProcessing && (
+      {/* Interactive Prompt Area */}
+      {(hitlQuestion || hitlPermission) && (
+        <HITLPrompt question={hitlQuestion} permission={hitlPermission} />
+      )}
+
+      {!isProcessing && !hitlQuestion && !hitlPermission && (
         <Box paddingX={1} marginBottom={1}>
           <Box marginRight={1}>
             <Text color="green" bold>

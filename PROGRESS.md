@@ -143,3 +143,18 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 - **Config & CLI**: Updated `JooneConfig`, `loadConfig`/`saveConfig`, and the `joone config` Clack onboarding wizard to optionally prompt for `OpenSandbox API key` and `Domain`.
 - **NFRs Documented**: Formally established architectural standards in `docs/05_prd.md` for Error Handling (Fallback), Rate Limiting (Budgets & Loop Breakers), Authentication (CLI keys), and Telemetry Data Retention (Local JSONs rotated at 30 days — 100% private).
 - **Tests**: 95/95 GREEN tests ensuring the sandbox layer abstraction natively handles API mappings without breaking `BashTool`.
+
+### 2026-03-04: Milestone 10 — Retry, HITL, and Skills Sync (COMPLETE)
+
+- **Error Hierarchy** (`src/core/errors.ts`): `JooneError` base class with `LLMApiError`, `SandboxError`, `ToolExecutionError` subclasses. Each carries `category`, `retryable` flag, structured `context`, and `toRecoveryHint()` for self-healing. `wrapLLMError()` auto-classifies raw provider errors.
+- **Retry** (`src/core/retry.ts`): `retryWithBackoff<T>()` generic utility with exponential backoff (1s→2s→4s + jitter). Respects `JooneError.retryable` flag. Non-retryable errors (401/403) fail immediately.
+- **Self-Recovery** (`src/core/agentLoop.ts`): On exhausted retries, `ExecutionHarness` injects the error's `toRecoveryHint()` as a `SystemMessage` into conversation history instead of crashing. Tool errors now wrapped in `ToolExecutionError`.
+- **HITLBridge** (`src/hitl/bridge.ts`): EventEmitter-based singleton with `askUser()` and `requestPermission()`. Configurable timeout (default 5 min) with auto-deny/auto-no-response.
+- **AskUserQuestionTool** (`src/tools/askUser.ts`): Agent-callable tool for mid-turn clarification, preference gathering, and plan approval.
+- **PermissionMiddleware** (`src/middleware/permission.ts`): `ToolMiddleware` implementation with 3 modes (`auto`, `ask_dangerous`, `ask_all`). Hardcoded `SAFE_TOOLS` whitelist. Uses `HITLBridge.requestPermission()` for dangerous tools.
+- **HITLPrompt** (`src/ui/components/HITLPrompt.tsx`): Ink TUI component rendering question/permission prompts with `TextInput` capture.
+- **Skills Sync** (`src/sandbox/sync.ts`): `syncSkillsToSandbox()` uploads user-level skill directories into `/workspace/.joone/skills/` in the sandbox.
+- **System Prompt**: Updated `globalSystemInstructions` with `ask_user_question` awareness, permission system notice, and skills discovery instructions.
+- **Config**: Added `permissionMode` to `JooneConfig` (default: `"auto"`).
+- **Edge Cases**: Added 8 new scenarios covering retry/self-recovery, HITL timeouts, permission misconfiguration, and skills sync.
+- **Tests**: 24 new tests (14 retry/errors + 10 HITL/permission) all GREEN. TypeScript build clean.

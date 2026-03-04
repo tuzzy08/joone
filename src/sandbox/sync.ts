@@ -101,4 +101,57 @@ export class FileSync {
     synced = await this.syncToSandbox(sandbox);
     return synced;
   }
+
+  /**
+   * Syncs user-level skill directories into the sandbox.
+   * Skills from `~/.joone/skills/` and `~/.agents/skills/` are uploaded
+   * into `/workspace/.joone/skills/` so they are available for agent execution.
+   *
+   * @param sandbox The active SandboxManager.
+   * @param skillPaths Absolute host paths to skill directories to sync.
+   * @returns Number of files synced.
+   */
+  async syncSkillsToSandbox(
+    sandbox: SandboxManager,
+    skillPaths: { path: string; source: "project" | "user" }[]
+  ): Promise<number> {
+    let synced = 0;
+
+    for (const { path: skillDir, source } of skillPaths) {
+      // Only sync user-level skills (project-level are already in projectRoot)
+      if (source !== "user") continue;
+      if (!fs.existsSync(skillDir)) continue;
+
+      const walkSkillDir = (dir: string) => {
+        let entries: fs.Dirent[];
+        try {
+          entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+
+          if (entry.isDirectory()) {
+            walkSkillDir(fullPath);
+          } else if (entry.isFile()) {
+            const relative = path.relative(skillDir, fullPath);
+            const sandboxPath = path.posix.join(
+              this.sandboxRoot,
+              ".joone",
+              "skills",
+              relative.replace(/\\/g, "/")
+            );
+            this.dirtyFiles.set(fullPath, sandboxPath);
+          }
+        }
+      };
+
+      walkSkillDir(skillDir);
+    }
+
+    synced = await this.syncToSandbox(sandbox);
+    return synced;
+  }
 }

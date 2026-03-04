@@ -27,6 +27,8 @@ export interface JooneConfig {
   langsmithApiKey?: string;
   /** LangSmith project name (optional, default: "joone"). */
   langsmithProject?: string;
+  /** Tool permission mode: 'auto' (no prompts), 'ask_dangerous' (prompt for destructive tools), 'ask_all' (prompt for everything). */
+  permissionMode?: "auto" | "ask_dangerous" | "ask_all";
 }
 
 /**
@@ -38,6 +40,7 @@ export const DEFAULT_CONFIG: JooneConfig = {
   maxTokens: 4096,
   temperature: 0,
   streaming: true,
+  permissionMode: "auto",
 };
 
 /**

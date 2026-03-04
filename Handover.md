@@ -86,6 +86,8 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 - ✅ **M5.5: Browser, Search & Skills:** `BrowserTool` (agent-browser), `WebSearchTool` (@valyu/ai-sdk), `SkillLoader` + `search_skills`/`load_skill` tools.
 - ✅ **M6: Tracing & Refinement:** `SessionTracer` (metrics routing), `TraceAnalyzer` (offline insights), LangSmith env integration, `joone analyze` CLI command.
 - ✅ **M8: OpenSandbox Fallback:** `ISandboxWrapper`, local docker degradation at `localhost:8080`, and documented NFRs (Rate Limits & Budgets).
+- ✅ **M9: Persistent Sessions:** `SessionStore` (JSONL), `SessionResumer` (host drift detection), `joone sessions` dashboard, `joone start --resume <id>`.
+- ✅ **M10: Retry, HITL, Skills Sync:** `JooneError` hierarchy + `retryWithBackoff`, `HITLBridge` + `AskUserQuestionTool` + `PermissionMiddleware`, user-level skills sandbox sync.
 
 ### Tool Routing Summary
 
@@ -95,12 +97,14 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 | `search_tools`, `activate_tool`   | `security_scan`, `dep_scan`         |
 | `web_search` (API call)           | `browser` (agent-browser CLI)       |
 | `search_skills`, `load_skill`     | Unknown tools (safe-by-default)     |
+| `ask_user_question`               |                                     |
 
 ### Pending Next Steps (Where to resume)
 
 **Start on Milestone 7: Testing & Evaluations (Evals).**
 
-1.  **LangSmith Evals**: Hook LangSmith datasets up to the `ExecutionHarness` to run regression tests against known code tasks (already supported by tracing!).
+1.  **LangSmith Evals**: Hook LangSmith datasets up to the `ExecutionHarness` to run regression tests against known code tasks.
 2.  **Dataset CI**: Build `joone eval` or similar offline script to assert Cache Hit Rate > 90% and Cost < $X per conversation.
+3.  **Security Keychain Integration**: Move API keys from plaintext JSON into OS keychain (Tier 2 security).
 
 _Reference `docs/08_roadmap.md` and `task.md` (in the agent brain) for the full checklist._

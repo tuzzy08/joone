@@ -29,6 +29,8 @@ import { PreCompletionMiddleware } from "../middleware/preCompletion.js";
 import { ExecutionHarness } from "../core/agentLoop.js";
 import { SessionStore } from "../core/sessionStore.js";
 import { SessionResumer } from "../core/sessionResumer.js";
+import { PermissionMiddleware } from "../middleware/permission.js";
+import { AskUserQuestionTool } from "../tools/askUser.js";
 
 const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 
@@ -315,6 +317,7 @@ program
       const pipeline = new MiddlewarePipeline();
       pipeline.use(new LoopDetectionMiddleware(3));
       pipeline.use(new CommandSanitizerMiddleware());
+      pipeline.use(new PermissionMiddleware(config.permissionMode ?? "auto"));
       const tracer = new SessionTracer();
       
       const { bindSandbox } = await import("../tools/index.js");
@@ -332,13 +335,20 @@ program
       const { FileSync } = await import("../sandbox/sync.js");
       const fileSync = new FileSync(process.cwd());
       bindSandbox(sandboxManager, fileSync);
+
+      // Sync user-level skills into the sandbox
+      const { SkillLoader } = await import("../skills/loader.js");
+      const skillLoader = new SkillLoader();
+      const skillPaths = skillLoader.getDiscoveryPaths();
+      await fileSync.syncSkillsToSandbox(sandboxManager, skillPaths);
+
       s.stop("Sandbox initialized");
       
       // For the CLI, we start by loading the CORE tools
       // Advanced tools (search, browser, etc.) will be dynamically loaded by the agent later
       // via the SearchToolsTool when the registry is fully integrated
       const { CORE_TOOLS } = await import("../tools/index.js");
-      const tools = [...CORE_TOOLS] as import("../tools/index.js").DynamicToolInterface[];
+      const tools = [...CORE_TOOLS, AskUserQuestionTool] as import("../tools/index.js").DynamicToolInterface[];
       
       let initialState;
       let sessionId: string | undefined = undefined;
@@ -362,7 +372,12 @@ program
         initialState = {
           globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
 You run in a hybrid environment: you have read/write access to the host machine for code edits, but all code execution, testing, and dependency installation MUST happen in the isolated E2B sandbox for safety.
-Always use 'bash' to run terminal commands. Never read or write outside the current project directory unless explicitly requested.`,
+Always use 'bash' to run terminal commands. Never read or write outside the current project directory unless explicitly requested.
+
+IMPORTANT CAPABILITIES:
+- You have access to an 'ask_user_question' tool. Use it to ask the user for clarification, preferences, or approval before making significant changes.
+- Some tool calls may require user approval before execution, depending on the user's permission settings. If a tool call is denied, try an alternative approach or ask the user for guidance.
+- You have access to Skills — reusable instruction sets for specialized tasks. Use 'search_skills' to discover them and 'load_skill' to activate their instructions.`,
           projectMemory: "No project context loaded yet.",
           sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
           conversationHistory: []

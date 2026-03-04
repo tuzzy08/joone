@@ -8,6 +8,9 @@ import { ToolCallContext } from "../middleware/types.js";
 import { SessionTracer } from "../tracing/sessionTracer.js";
 import { countMessageTokens } from "./tokenCounter.js";
 import { SessionStore } from "./sessionStore.js";
+import { retryWithBackoff } from "./retry.js";
+import { wrapLLMError, JooneError, ToolExecutionError } from "./errors.js";
+import { SystemMessage } from "@langchain/core/messages";
 
 export interface StreamStepOptions {
     /** Called for each text token received from the stream. */
@@ -56,20 +59,40 @@ export class ExecutionHarness {
     public async step(state: ContextState): Promise<AIMessage> {
         const start = Date.now();
         const messages = this.promptBuilder.buildPrompt(state);
-        const response = await this.llm.invoke(messages);
-        
-        const promptTokens = countMessageTokens(messages);
-        const completionTokens = countMessageTokens([response as AIMessage]);
-        
-        this.tracer.recordLLMCall({
-            promptTokens,
-            completionTokens,
-            cached: false,
-            duration: Date.now() - start
-        });
-        
-        await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
-        return response as AIMessage;
+
+        try {
+            const response = await retryWithBackoff(
+                () => this.llm.invoke(messages).catch((e) => { throw wrapLLMError(e, this.provider); }),
+                {
+                    onRetry: (attempt, error, delay) => {
+                        this.tracer.recordError({ message: `LLM retry #${attempt}: ${error.message} (waiting ${delay}ms)` });
+                    },
+                }
+            );
+
+            const promptTokens = countMessageTokens(messages);
+            const completionTokens = countMessageTokens([response as AIMessage]);
+
+            this.tracer.recordLLMCall({
+                promptTokens,
+                completionTokens,
+                cached: false,
+                duration: Date.now() - start
+            });
+
+            await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+            return response as AIMessage;
+        } catch (error: unknown) {
+            // Self-recovery: inject the error hint and let the agent adapt
+            if (error instanceof JooneError && error.retryable) {
+                this.tracer.recordError({ message: `LLM retries exhausted: ${error.message}` });
+                state.conversationHistory.push(new SystemMessage(error.toRecoveryHint()));
+                await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+                // Return a synthetic AI message so the turn doesn't crash
+                return new AIMessage(error.toRecoveryHint());
+            }
+            throw error; // Fatal (auth, config) — propagate to TUI
+        }
     }
 
     /**
@@ -84,66 +107,92 @@ export class ExecutionHarness {
         const start = Date.now();
         const messages = this.promptBuilder.buildPrompt(state);
 
-        let fullContent = "";
-        const toolCallBuffers: Map<number, { id: string; name: string; argsJson: string }> = new Map();
+        try {
+            const result = await retryWithBackoff(
+                async () => {
+                    let fullContent = "";
+                    const toolCallBuffers: Map<number, { id: string; name: string; argsJson: string }> = new Map();
 
-        const stream = await (this.llm as any).stream(messages);
-
-        for await (const chunk of stream) {
-            if (chunk.content && typeof chunk.content === "string") {
-                fullContent += chunk.content;
-                if (options.onToken) {
-                    options.onToken(chunk.content);
-                }
-            }
-
-            if (chunk.tool_call_chunks && chunk.tool_call_chunks.length > 0) {
-                for (const tc of chunk.tool_call_chunks) {
-                    const idx = tc.index ?? 0;
-                    if (!toolCallBuffers.has(idx)) {
-                        toolCallBuffers.set(idx, {
-                            id: tc.id || "",
-                            name: tc.name || "",
-                            argsJson: "",
-                        });
+                    let stream: AsyncIterable<any>;
+                    try {
+                        stream = await (this.llm as any).stream(messages);
+                    } catch (e) {
+                        throw wrapLLMError(e, this.provider);
                     }
-                    const buf = toolCallBuffers.get(idx)!;
-                    if (tc.id) buf.id = tc.id;
-                    if (tc.name) buf.name = tc.name;
-                    if (tc.args) buf.argsJson += tc.args;
+
+                    for await (const chunk of stream) {
+                        if (chunk.content && typeof chunk.content === "string") {
+                            fullContent += chunk.content;
+                            if (options.onToken) {
+                                options.onToken(chunk.content);
+                            }
+                        }
+
+                        if (chunk.tool_call_chunks && chunk.tool_call_chunks.length > 0) {
+                            for (const tc of chunk.tool_call_chunks) {
+                                const idx = tc.index ?? 0;
+                                if (!toolCallBuffers.has(idx)) {
+                                    toolCallBuffers.set(idx, {
+                                        id: tc.id || "",
+                                        name: tc.name || "",
+                                        argsJson: "",
+                                    });
+                                }
+                                const buf = toolCallBuffers.get(idx)!;
+                                if (tc.id) buf.id = tc.id;
+                                if (tc.name) buf.name = tc.name;
+                                if (tc.args) buf.argsJson += tc.args;
+                            }
+                        }
+                    }
+
+                    const toolCalls = Array.from(toolCallBuffers.values()).map((buf) => ({
+                        id: buf.id,
+                        name: buf.name,
+                        args: (() => {
+                            try {
+                                return JSON.parse(buf.argsJson || "{}");
+                            } catch {
+                                return { _parseError: true, rawArgs: buf.argsJson };
+                            }
+                        })(),
+                        type: "tool_call" as const,
+                    }));
+
+                    return new AIMessage({
+                        content: fullContent,
+                        tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+                    });
+                },
+                {
+                    onRetry: (attempt, error, delay) => {
+                        this.tracer.recordError({ message: `LLM stream retry #${attempt}: ${error.message} (waiting ${delay}ms)` });
+                    },
                 }
+            );
+
+            const promptTokens = countMessageTokens(messages);
+            const completionTokens = countMessageTokens([result]);
+
+            this.tracer.recordLLMCall({
+                promptTokens,
+                completionTokens,
+                cached: false,
+                duration: Date.now() - start
+            });
+
+            await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+            return result;
+        } catch (error: unknown) {
+            // Self-recovery for streaming
+            if (error instanceof JooneError && error.retryable) {
+                this.tracer.recordError({ message: `LLM stream retries exhausted: ${(error as JooneError).message}` });
+                state.conversationHistory.push(new SystemMessage((error as JooneError).toRecoveryHint()));
+                await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+                return new AIMessage((error as JooneError).toRecoveryHint());
             }
+            throw error;
         }
-
-        const toolCalls = Array.from(toolCallBuffers.values()).map((buf) => ({
-            id: buf.id,
-            name: buf.name,
-            args: (() => {
-                try {
-                    return JSON.parse(buf.argsJson || "{}");
-                } catch {
-                    return { _parseError: true, rawArgs: buf.argsJson };
-                }
-            })(),
-            type: "tool_call" as const,
-        }));
-        const result = new AIMessage({
-            content: fullContent,
-            tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
-        });
-
-        const promptTokens = countMessageTokens(messages);
-        const completionTokens = countMessageTokens([result]);
-        
-        this.tracer.recordLLMCall({
-            promptTokens,
-            completionTokens,
-            cached: false,
-            duration: Date.now() - start
-        });
-
-        await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
-        return result;
     }
 
     /**
@@ -217,15 +266,21 @@ export class ExecutionHarness {
                     tool_call_id: safeCallId
                 }));
             } catch (error: any) {
+                const toolError = new ToolExecutionError(error.message, {
+                    toolName: call.name,
+                    args: call.args,
+                    retryable: false,
+                    cause: error,
+                });
                 this.tracer.recordToolCall({
                     name: call.name,
                     args: call.args,
                     duration: Date.now() - start,
                     success: false
                 });
-                this.tracer.recordError({ message: error.message, tool: call.name });
+                this.tracer.recordError({ message: toolError.message, tool: call.name });
                 results.push(new ToolMessage({
-                    content: `Error executing tool: ${error.message}`,
+                    content: toolError.toRecoveryHint(),
                     tool_call_id: safeCallId
                 }));
             }

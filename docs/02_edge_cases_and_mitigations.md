@@ -66,3 +66,36 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
 - **Provider/Model Switching Mid-Task:**
   - _The Edge Case:_ Starting a complex reasoning loop with Opus, pausing, and resuming with a lightweight local model like Llama 3 8B. The history is filled with complex schema usages that confused the smaller model.
   - _Mitigation:_ Serialize the `.jsonl` lines with `provider/model` metadata blocks. Upon resumption, the CLI explicitly warns if a provider downgrade is detected.
+
+## 5. Error Recovery & Retry Edge Cases
+
+- **Transient LLM API Failure (429/5xx):**
+  - _The Edge Case:_ The LLM provider returns a rate-limit (429) or server error (500/502/503) mid-turn, crashing the entire session.
+  - _Mitigation:_ `retryWithBackoff()` wraps all LLM calls with exponential backoff (1s→2s→4s + jitter). Only `JooneError` instances with `retryable === true` trigger retries; auth failures (401/403) propagate immediately.
+- **Exhausted Retries (Self-Recovery):**
+  - _The Edge Case:_ After 3 retry attempts, the LLM API is still down. The session crashes and the user loses all progress.
+  - _Mitigation:_ Instead of crashing, `ExecutionHarness` injects the error's `toRecoveryHint()` as a `SystemMessage` into the conversation, returning a synthetic `AIMessage`. The agent can observe the error context and adapt (e.g., wait, simplify, or ask the user).
+- **Unclassified Provider Errors:**
+  - _The Edge Case:_ A new LLM provider throws a non-standard error with no HTTP status code, bypassing the retry classification.
+  - _Mitigation:_ `wrapLLMError()` inspects `.status`, `.statusCode`, `.code`, and `.response.status` on raw errors, covering the common patterns of LangChain, Axios, and native `fetch` errors.
+
+## 6. Human-in-the-Loop Edge Cases
+
+- **Permission Timeout (User Away):**
+  - _The Edge Case:_ The agent calls a dangerous tool (`bash`, `write_file`) while the user is away from the terminal. The agent blocks indefinitely waiting for permission.
+  - _Mitigation:_ `HITLBridge.requestPermission()` has a configurable timeout (default 5 minutes) that auto-denies and returns a short-circuit string, letting the agent try an alternative.
+- **Ask Question Timeout:**
+  - _The Edge Case:_ The agent asks the user a clarifying question via `ask_user_question`, but the user doesn't respond.
+  - _Mitigation:_ `HITLBridge.askUser()` resolves with `"[No response]"` after timeout, so the agent can proceed with a default assumption.
+- **Permission Mode Misconfiguration:**
+  - _The Edge Case:_ The user sets `"permissionMode": "ask_all"` and then every tool call — including harmless reads — triggers a prompt, making the agent unusable.
+  - _Mitigation:_ `PermissionMiddleware` maintains a hardcoded `SAFE_TOOLS` whitelist (`read_file`, `search_skills`, `ask_user_question`, etc.) that bypasses approval even in `ask_all` mode.
+
+## 7. Skills Sync Edge Cases
+
+- **Missing User Skills Directory:**
+  - _The Edge Case:_ `~/.joone/skills/` doesn't exist on the user's machine. The sync crashes trying to walk a nonexistent path.
+  - _Mitigation:_ `syncSkillsToSandbox()` checks `fs.existsSync()` before walking each skill directory and silently skips missing paths.
+- **Skill Name Collision (Project vs. User):**
+  - _The Edge Case:_ A user-level skill and a project-level skill have the same name. Both get synced to the sandbox, creating confusion.
+  - _Mitigation:_ `SkillLoader.discoverSkills()` deduplicates by name with project-level priority. `syncSkillsToSandbox()` only uploads `source: "user"` skills since project-level skills are already inside `projectRoot`.
