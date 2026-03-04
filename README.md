@@ -58,6 +58,21 @@ Or, if you want to skip global installation altogether, run it on-demand:
 npx joone@latest start
 ```
 
+### Uninstallation
+
+Since Joone manages its own user-local plugins and settings, completely removing Joone from your system is a two-step process:
+
+1. **Wipe User Data**: First, use Joone's built-in cleanup command to safely delete your configurations, traces, and dynamically installed LLM provider dependencies stored in `~/.joone`:
+   ```bash
+   joone cleanup
+   ```
+2. **Remove the App**: Next, uninstall the base package using the package manager you originally used:
+   ```bash
+   npm uninstall -g joone
+   # OR
+   brew uninstall joone
+   ```
+
 ---
 
 ## 🛠️ Commands
