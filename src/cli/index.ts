@@ -171,17 +171,6 @@ async function runOnboarding(): Promise<JooneConfig> {
     }
   }
 
-  // ── Streaming ─────────────────────────────
-  const streaming = await confirm({
-    message: "Enable streaming output?",
-    initialValue: existingConfig.streaming,
-  });
-
-  if (isCancel(streaming)) {
-    cancel("Configuration cancelled.");
-    process.exit(0);
-  }
-
   // ── Optional Service Keys (skip with Enter) ──
 
   const sectionMsg = chalk.dim("\n  Optional service keys (press Enter to skip):\n");
@@ -245,7 +234,7 @@ async function runOnboarding(): Promise<JooneConfig> {
     apiKey: typeof apiKey === "string" ? apiKey : undefined,
     maxTokens: existingConfig.maxTokens,
     temperature: existingConfig.temperature,
-    streaming,
+    streaming: existingConfig.streaming,
     sandboxTemplate: existingConfig.sandboxTemplate,
     e2bApiKey: typeof e2bKey === "string" ? e2bKey : undefined,
     openSandboxApiKey: typeof osKey === "string" ? osKey : undefined,
