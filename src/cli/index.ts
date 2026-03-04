@@ -17,6 +17,7 @@ import {
 } from "@clack/prompts";
 import { loadConfig, saveConfig, JooneConfig, DEFAULT_CONFIG } from "./config.js";
 import { createModel } from "./modelFactory.js";
+import { installProvider, uninstallProvider, getProviderDir } from "./providers.js";
 import { tryEnableLangSmithFromConfig } from "../tracing/langsmith.js";
 import { TraceAnalyzer } from "../tracing/analyzer.js";
 import { SessionTracer } from "../tracing/sessionTracer.js";
@@ -224,9 +225,19 @@ async function runOnboarding(): Promise<JooneConfig> {
   if (isCancel(langsmithKey)) { cancel("Configuration cancelled."); process.exit(0); }
   if (!langsmithKey || (langsmithKey as string).trim() === "") langsmithKey = existingConfig.langsmithApiKey ?? "";
 
-  // ── Save ──────────────────────────────────
   const s = spinner();
-  s.start("Saving configuration...");
+  try {
+    s.start(`Downloading and installing the ${provider} provider package...`);
+    await installProvider(provider as string);
+    s.stop(`Installed ${provider} provider package!`);
+  } catch (err: any) {
+    s.stop(`Failed to install ${provider} package.`);
+    console.error(chalk.yellow(`\n  ⚠ Could not auto-install the provider package: ${err.message}`));
+    console.log(chalk.dim(`  Try running: joone provider add ${provider}\n`));
+  }
+
+  const s2 = spinner();
+  s2.start("Saving configuration...");
 
   const newConfig: JooneConfig = {
     provider: provider as string,
@@ -246,7 +257,7 @@ async function runOnboarding(): Promise<JooneConfig> {
   };
 
   saveConfig(CONFIG_PATH, newConfig);
-  s.stop("Configuration saved!");
+  s2.stop("Configuration saved!");
 
   outro(
     chalk.green("✓") +
@@ -264,6 +275,81 @@ program
   .description("Configure your LLM provider, model, and API key")
   .action(async () => {
     await runOnboarding();
+  });
+
+// ─── joone provider ────────────────────────────────────────────────────────────
+
+const providerCmd = program.command("provider").description("Manage dynamic LLM provider packages");
+
+providerCmd
+  .command("add <providerName>")
+  .description("Install a provider package")
+  .action(async (providerName) => {
+    const s = spinner();
+    s.start(`Installing ${providerName}...`);
+    try {
+      await installProvider(providerName);
+      s.stop(`Successfully installed ${providerName}`);
+    } catch (e: any) {
+      s.stop(`Failed to install ${providerName}`);
+      console.error(chalk.red(`\n  ✗ ${e.message}\n`));
+      process.exit(1);
+    }
+  });
+
+providerCmd
+  .command("remove <providerName>")
+  .description("Uninstall a provider package")
+  .action(async (providerName) => {
+    const s = spinner();
+    s.start(`Uninstalling ${providerName}...`);
+    try {
+      await uninstallProvider(providerName);
+      s.stop(`Successfully uninstalled ${providerName}`);
+    } catch (e: any) {
+      s.stop(`Failed to uninstall ${providerName}`);
+      console.error(chalk.red(`\n  ✗ ${e.message}\n`));
+      process.exit(1);
+    }
+  });
+
+// ─── joone cleanup ─────────────────────────────────────────────────────────────
+
+program
+  .command("cleanup")
+  .description("Remove all Joone user data, settings, and dynamically installed providers")
+  .action(async () => {
+    const isConfirmed = await confirm({
+      message: `Are you sure you want to delete all Joone data and settings in ${chalk.bold("~/.joone")}?`,
+    });
+
+    if (isCancel(isConfirmed) || !isConfirmed) {
+      cancel("Cleanup aborted.");
+      process.exit(0);
+    }
+
+    const jooneDir = path.join(os.homedir(), ".joone");
+    const s = spinner();
+    s.start("Deleting ~/.joone directory...");
+
+    try {
+      if (fs.existsSync(jooneDir)) {
+        fs.rmSync(jooneDir, { recursive: true, force: true });
+        s.stop("Cleanup complete.");
+        console.log(
+          chalk.green(`\n  ✓ Successfully removed ${jooneDir}\n`) +
+          chalk.dim(`  To finish removing Joone entirely, uninstall it via your package manager:\n`) +
+          chalk.dim(`  e.g., \`npm uninstall -g joone\` or \`brew uninstall joone\`\n`)
+        );
+      } else {
+        s.stop("Nothing to clean up.");
+        console.log(chalk.dim(`\n  Directory ${jooneDir} does not exist.\n`));
+      }
+    } catch (e: any) {
+      s.stop("Cleanup failed.");
+      console.error(chalk.red(`\n  ✗ Error deleting directory: ${e.message}\n`));
+      process.exit(1);
+    }
   });
 
 // ─── joone (default) ───────────────────────────────────────────────────────────
@@ -398,7 +484,9 @@ IMPORTANT CAPABILITIES:
       await sandboxManager.destroy();
     } catch (error: unknown) {
       if (error instanceof Error) {
-        console.error(chalk.red(`\n  ✗ ${error.message}\n`));
+        console.error(chalk.red(`\n  ✗ ${error.stack}\n`));
+      } else {
+        console.error(chalk.red(`\n  ✗ ${String(error)}\n`));
       }
       process.exit(1);
     }

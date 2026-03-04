@@ -1,17 +1,55 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { pathToFileURL } from "node:url";
+import * as path from "node:path";
 import { JooneConfig } from "./config.js";
+import { getProviderDir, PROVIDER_PACKAGE_MAP } from "./providers.js";
 
 /**
  * Providers that do NOT require an API key (e.g. local models).
  */
 const NO_KEY_PROVIDERS = new Set(["ollama"]);
 
+import { createRequire } from "node:module";
+
+/**
+ * Attempts to dynamically import a provider package.
+ * First tries the user-local ~/.joone/providers/node_modules directory.
+ * If that fails, falls back to a standard require/import for bundled setups.
+ */
+async function loadProviderPackage(provider: string): Promise<any> {
+  const packageName = PROVIDER_PACKAGE_MAP[provider];
+  if (!packageName) {
+    throw new Error(`Unknown package name for provider: ${provider}`);
+  }
+
+  // 1. Try user-local plugin directory
+  const localPluginPath = path.join(getProviderDir(), "node_modules", packageName);
+  try {
+    // Node.js ESM cannot import absolute directories (ERR_UNSUPPORTED_DIR_IMPORT).
+    // We must use createRequire to resolve the actual package.json "main" or "exports" entry point.
+    const require = createRequire(import.meta.url);
+    const resolvedPath = require.resolve(localPluginPath);
+    return await import(pathToFileURL(resolvedPath).href);
+  } catch (err: any) {
+    // Ignore MODULE_NOT_FOUND or similar errors and fallback
+    if (err.code !== "ERR_MODULE_NOT_FOUND" && !err.message.includes("Cannot find module")) {
+       // console.debug(`Failed to load from plugin dir:`, err.message);
+    }
+  }
+
+  // 2. Fallback to standard resolution (for npx, bundled versions, etc)
+  try {
+    return await import(packageName);
+  } catch (err: any) {
+    throw new Error(`Provider "${provider}" requires the ${packageName} package.\nRun: joone provider add ${provider}`);
+  }
+}
+
 /**
  * Model Factory
  *
  * Creates a LangChain BaseChatModel based on the JooneConfig.
  * Uses dynamic imports so only the selected provider's package is loaded.
- * If a provider package isn't installed, throws a helpful error.
  */
 export async function createModel(config: JooneConfig): Promise<BaseChatModel> {
   const { provider, model, apiKey, maxTokens, temperature } = config;
@@ -23,168 +61,114 @@ export async function createModel(config: JooneConfig): Promise<BaseChatModel> {
     );
   }
 
-  switch (provider) {
-    case "anthropic": {
-      try {
-        const { ChatAnthropic } = await import("@langchain/anthropic");
+  try {
+    switch (provider) {
+      case "anthropic": {
+        const pkg = await loadProviderPackage(provider);
+        const ChatAnthropic = pkg.ChatAnthropic || pkg.default?.ChatAnthropic;
         return new ChatAnthropic({
           modelName: model,
           anthropicApiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "anthropic" requires the @langchain/anthropic package.\nRun: npm install @langchain/anthropic`
-        );
       }
-    }
 
-    case "openai": {
-      try {
-        const { ChatOpenAI } = await import("@langchain/openai");
+      case "openai": {
+        const pkg = await loadProviderPackage(provider);
+        const ChatOpenAI = pkg.ChatOpenAI || pkg.default?.ChatOpenAI;
         return new ChatOpenAI({
           modelName: model,
           openAIApiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "openai" requires the @langchain/openai package.\nRun: npm install @langchain/openai`
-        );
       }
-    }
 
-    case "google": {
-      try {
-        // @ts-ignore
-        const { ChatGoogleGenAI } = await import("@langchain/google-genai");
-        return new ChatGoogleGenAI({
-          modelName: model,
+      case "google": {
+        const pkg = await loadProviderPackage(provider);
+        // Specifically for Google, LangChain frequently uses ChatGoogleGenerativeAI
+        const ChatGoogle = pkg.ChatGoogleGenerativeAI || pkg.default?.ChatGoogleGenerativeAI || pkg.ChatGoogleGenAI || pkg.default?.ChatGoogleGenAI;
+        
+        if (!apiKey) {
+          throw new Error("API key is required for provider \"google\". Run: joone config");
+        }
+
+        return new ChatGoogle({
+          model: model,
           apiKey: apiKey,
           maxOutputTokens: maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "google" requires the @langchain/google-genai package.\nRun: npm install @langchain/google-genai`
-        );
       }
-    }
 
-    case "mistral": {
-      try {
-        // @ts-ignore
-        const { ChatMistralAI } = await import("@langchain/mistralai");
+      case "mistral": {
+        const { ChatMistralAI } = await loadProviderPackage(provider);
         return new ChatMistralAI({
           modelName: model,
           apiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "mistral" requires the @langchain/mistralai package.\nRun: npm install @langchain/mistralai`
-        );
       }
-    }
 
-    case "groq": {
-      try {
-        // @ts-ignore
-        const { ChatGroq } = await import("@langchain/groq");
+      case "groq": {
+        const { ChatGroq } = await loadProviderPackage(provider);
         return new ChatGroq({
           modelName: model,
           apiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "groq" requires the @langchain/groq package.\nRun: npm install @langchain/groq`
-        );
       }
-    }
 
-    case "deepseek": {
-      try {
-        // @ts-ignore
-        const { ChatDeepSeek } = await import("@langchain/deepseek");
+      case "deepseek": {
+        const { ChatDeepSeek } = await loadProviderPackage(provider);
         return new ChatDeepSeek({
           modelName: model,
           apiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "deepseek" requires the @langchain/deepseek package.\nRun: npm install @langchain/deepseek`
-        );
       }
-    }
 
-    case "fireworks": {
-      try {
-        // @ts-ignore
-        const { ChatFireworks } = await import("@langchain/community/chat_models/fireworks");
+      case "fireworks": {
+        const { ChatFireworks } = await loadProviderPackage(provider);
         return new ChatFireworks({
           modelName: model,
           fireworksApiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "fireworks" requires the @langchain/community package.\nRun: npm install @langchain/community`
-        );
       }
-    }
 
-    case "together": {
-      try {
-        // @ts-ignore
-        const { ChatTogetherAI } = await import("@langchain/community/chat_models/togetherai");
+      case "together": {
+        const { ChatTogetherAI } = await loadProviderPackage(provider);
         return new ChatTogetherAI({
           modelName: model,
           togetherAIApiKey: apiKey,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        if (e instanceof Error && e.message.includes("API key")) throw e;
-        throw new Error(
-          `Provider "together" requires the @langchain/community package.\nRun: npm install @langchain/community`
-        );
       }
-    }
 
-    case "ollama": {
-      try {
-        // @ts-ignore
-        const { ChatOllama } = await import("@langchain/ollama");
+      case "ollama": {
+        const { ChatOllama } = await loadProviderPackage(provider);
         return new ChatOllama({
           model: model,
           maxTokens,
           temperature,
         });
-      } catch (e: unknown) {
-        throw new Error(
-          `Provider "ollama" requires the @langchain/ollama package.\nRun: npm install @langchain/ollama`
-        );
       }
-    }
 
-    default:
-      throw new Error(
-        `Unsupported provider: "${provider}". Supported providers: anthropic, openai, google, mistral, groq, deepseek, fireworks, together, ollama.`
-      );
+      default:
+        throw new Error(
+          `Unsupported provider: "${provider}". Supported providers: anthropic, openai, google, mistral, groq, deepseek, fireworks, together, ollama.`
+        );
+    }
+  } catch (e: unknown) {
+    // If LangChain itself throws an API key error (sometimes they do runtime checks)
+    if (e instanceof Error && e.message.includes("API key")) throw e;
+    throw e; // Rethrow the loadProviderPackage message or other unexpected errors
   }
 }
