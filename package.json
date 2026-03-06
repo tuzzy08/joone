@@ -1,6 +1,6 @@
 {
   "name": "joonecli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An autonomous coding agent",
   "main": "dist/cli/index.js",
   "bin": {
@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "postinstall": "node ./dist/cli/postinstall.js"
   },
   "repository": {
     "type": "git",

@@ -26,36 +26,36 @@
 
 ## 🚀 Getting Started
 
-### Installation
+## 🚀 Quickstart
 
-Install Joone globally via npm:
+The fastest way to experience Joone is to run it on-demand without installing anything globally. This will automatically trigger the onboarding wizard and launch your first session seamlessly:
+
+```bash
+npx joone@latest start
+```
+
+### Global Installation (Alternative)
+
+If you prefer to install Joone globally:
 
 ```bash
 npm install -g joone
 ```
 
+Once installed, simply run `joone` in any directory. If it's your first time, the configuration wizard will open automatically.
+
 ### Configuration
 
-Run the automated onboarding wizard to configure your preferred LLM provider, models, and API keys:
+If you ever need to change your LLM provider, API keys, or models, run the configuration wizard:
 
 ```bash
 joone config
 ```
 
-_This will prompt you for your LLM API Key and optionally your E2B Sandbox API key. Keys are securely stored in `~/.joone/config.json`._
-
-### Start Joone
-
 To start an autonomous session in your current project directory:
 
 ```bash
 joone start
-```
-
-Or, if you want to skip global installation altogether, run it on-demand:
-
-```bash
-npx joone@latest start
 ```
 
 ### Uninstallation

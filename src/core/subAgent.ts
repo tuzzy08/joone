@@ -174,8 +174,8 @@ export class SubAgentManager {
       : this.allTools;
 
     // Create isolated conversation history
-    const systemPrompt = new SystemMessage(
-      `${spec.systemPrompt}\n\n--- Current Task ---\n${task}`
+    const systemPrompt = new HumanMessage(
+      `<system-directive>\n${spec.systemPrompt}\n\n--- Current Task ---\n${task}\n</system-directive>`
     );
 
     const history: BaseMessage[] = [

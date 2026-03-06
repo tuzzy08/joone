@@ -65,8 +65,8 @@ describe("SessionStore", () => {
         const history = loaded.state.conversationHistory;
         expect(history.length).toBe(4);
         
-        expect(history[0]).toBeInstanceOf(SystemMessage);
-        expect(history[0].content).toBe("Injected dynamic system rules.");
+        expect(history[0]).toBeInstanceOf(HumanMessage);
+        expect(history[0].content).toBe("<system-reminder>\nInjected dynamic system rules.\n</system-reminder>");
         
         expect(history[1]).toBeInstanceOf(HumanMessage);
         expect(history[1].content).toBe("Hello agent!");

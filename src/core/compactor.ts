@@ -179,8 +179,8 @@ export class ConversationCompactor {
     maxSummaryTokens: number
   ): Promise<string> {
     // Construct the prompt for the compactor LLM
-    const compactPrompt = new SystemMessage(
-      `${COMPACT_SYSTEM_PROMPT}\n\nKeep your summary under ${maxSummaryTokens} tokens.`
+    const compactPrompt = new HumanMessage(
+      `<system-directive>\n${COMPACT_SYSTEM_PROMPT}\n\nKeep your summary under ${maxSummaryTokens} tokens.\n</system-directive>`
     );
 
     // Convert evicted messages into a readable format for the summarizer

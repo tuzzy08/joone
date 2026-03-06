@@ -9,7 +9,7 @@
  * - 95% (CRITICAL): Forces emergency truncation if compaction fails
  */
 
-import { BaseMessage, SystemMessage } from "@langchain/core/messages";
+import { BaseMessage, SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Runnable } from "@langchain/core/runnables";
 import { CacheOptimizedPromptBuilder, ContextState } from "./promptBuilder.js";
@@ -100,11 +100,11 @@ export class ContextGuard {
     const recentMsgs = state.conversationHistory.slice(-keepLast);
     const evictedCount = state.conversationHistory.length - keepLast;
 
-    const emergencySystemMsg = new SystemMessage(
-      `[EMERGENCY CONTEXT TRUNCATION]\n` +
+    const emergencySystemMsg = new HumanMessage(
+      `<system-alert>\n[EMERGENCY CONTEXT TRUNCATION]\n` +
       `The conversation exceeded the maximum context window (${this.maxTokens} tokens). ` +
       `Older messages were aggressively deleted without summarization to prevent an immediate crash.\n` +
-      `You are the same agent. ` + createHandoffPrompt(new Date().toISOString())
+      `You are the same agent. ` + createHandoffPrompt(new Date().toISOString()) + `\n</system-alert>`
     );
 
     const newHistory = [emergencySystemMsg, ...recentMsgs];

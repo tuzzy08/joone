@@ -278,6 +278,18 @@ program
   .description("Configure your LLM provider, model, and API key")
   .action(async () => {
     await runOnboarding();
+    
+    const startNow = await confirm({
+      message: "Would you like to start Joone now?",
+      initialValue: true
+    });
+    
+    if (startNow && !isCancel(startNow)) {
+      // Programmatically invoke the start command
+      await program.parseAsync(["node", "joone", "start"]);
+    } else {
+      console.log(chalk.dim("\n  Run `joone` anytime to start an agent session.\n"));
+    }
   });
 
 // ─── joone provider ────────────────────────────────────────────────────────────

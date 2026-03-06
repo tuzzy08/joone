@@ -71,7 +71,8 @@ export class SessionStore {
                     tool_calls: raw.tool_calls || undefined,
                 });
             case "system":
-                return new SystemMessage(raw.content);
+                // Remap old saved SystemMessages to HumanMessages to prevent provider index errors
+                return new HumanMessage(`<system-reminder>\n${raw.content}\n</system-reminder>`);
             case "tool":
                 return new ToolMessage({
                     content: raw.content,
