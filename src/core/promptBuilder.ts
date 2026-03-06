@@ -37,18 +37,16 @@ export class CacheOptimizedPromptBuilder {
     // In @langchain/anthropic, to use cache_control, we can inject it into the final message of each tier if needed,
     // but preserving the exact order of the system prompts is the main requirement.
 
+    const unifiedContent = [
+      state.globalSystemInstructions,
+      `--- Project Context ---\n${state.projectMemory}`,
+      `--- Session Rules ---\n${state.sessionContext}`,
+    ].join("\n\n");
+
     const systemMessages: BaseMessage[] = [
       new SystemMessage({
-        content: state.globalSystemInstructions,
-        name: "global_instructions",
-      }),
-      new SystemMessage({
-        content: `--- Project Context ---\n${state.projectMemory}`,
-        name: "project_context",
-      }),
-      new SystemMessage({
-        content: `--- Session Rules ---\n${state.sessionContext}`,
-        name: "session_context",
+        content: unifiedContent,
+        name: "global_context",
       }),
     ];
 
@@ -89,10 +87,10 @@ export class CacheOptimizedPromptBuilder {
       return history;
     }
 
-    // Use SystemMessage (not AIMessage) to avoid breaking user/assistant
-    // alternation rules enforced by some providers (e.g. Anthropic).
-    const compactedMessage = new SystemMessage(
-      `[The previous conversation history has been compacted.]\nSummary:\n${summary}`,
+    // Use HumanMessage formatted as a system update to avoid breaking Google's validation
+    // and maintaining proper user/assistant flow.
+    const compactedMessage = new HumanMessage(
+      `<system-update>\n[The previous conversation history has been compacted.]\nSummary:\n${summary}\n</system-update>`,
     );
 
     // Preserve recent messages for continuity

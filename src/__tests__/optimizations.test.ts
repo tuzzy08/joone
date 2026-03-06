@@ -138,8 +138,8 @@ describe("Context Compaction", () => {
 
     // Should have: 1 summary + 4 preserved
     expect(compacted).toHaveLength(5);
-    expect((compacted[0] as SystemMessage).content).toContain("compacted");
-    expect((compacted[0] as SystemMessage).content).toContain("Summary of turns 1-2.");
+    expect((compacted[0] as HumanMessage).content).toContain("compacted");
+    expect((compacted[0] as HumanMessage).content).toContain("Summary of turns 1-2.");
   });
 });
 

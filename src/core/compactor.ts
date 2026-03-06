@@ -146,12 +146,12 @@ export class ConversationCompactor {
         maxSummaryTokens
       );
 
-      const summaryMessage = new SystemMessage(
-        `[COMPACTED CONVERSATION SUMMARY]\n${summaryText}`
+      const summaryMessage = new HumanMessage(
+        `<system-summary>\n[COMPACTED CONVERSATION SUMMARY]\n${summaryText}\n</system-summary>`
       );
 
-      const handoffMessage = new SystemMessage(
-        createHandoffPrompt(new Date().toISOString())
+      const handoffMessage = new HumanMessage(
+        `<system-handoff>\n${createHandoffPrompt(new Date().toISOString())}\n</system-handoff>`
       );
 
       const compactedHistory = [summaryMessage, handoffMessage, ...recentMessages];
@@ -233,9 +233,9 @@ export class ConversationCompactor {
       `The conversation is continuing below.`,
     ].join("\n");
 
-    const summaryMessage = new SystemMessage(summaryText);
-    const handoffMessage = new SystemMessage(
-      createHandoffPrompt(new Date().toISOString())
+    const summaryMessage = new HumanMessage(`<system-summary>\n${summaryText}\n</system-summary>`);
+    const handoffMessage = new HumanMessage(
+      `<system-handoff>\n${createHandoffPrompt(new Date().toISOString())}\n</system-handoff>`
     );
 
     const compactedHistory = [summaryMessage, handoffMessage, ...recentMessages];

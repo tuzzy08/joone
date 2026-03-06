@@ -98,7 +98,7 @@ export class ExecutionHarness {
             // Self-recovery: inject the error hint and let the agent adapt
             if (error instanceof JooneError && error.retryable) {
                 this.tracer.recordError({ message: `LLM retries exhausted: ${error.message}` });
-                state.conversationHistory.push(new SystemMessage(error.toRecoveryHint()));
+                state.conversationHistory.push(new HumanMessage(`<system-alert>\nSystem recovery hint:\n${error.toRecoveryHint()}\n</system-alert>`));
                 await this.autoSave.forceSave({ config: { provider: this.provider, model: this.model }, state });
                 // Return a synthetic AI message so the turn doesn't crash
                 return new AIMessage(error.toRecoveryHint());
@@ -204,7 +204,7 @@ export class ExecutionHarness {
             // Self-recovery for streaming
             if (error instanceof JooneError && error.retryable) {
                 this.tracer.recordError({ message: `LLM stream retries exhausted: ${(error as JooneError).message}` });
-                state.conversationHistory.push(new SystemMessage((error as JooneError).toRecoveryHint()));
+                state.conversationHistory.push(new HumanMessage(`<system-alert>\nSystem recovery hint:\n${(error as JooneError).toRecoveryHint()}\n</system-alert>`));
                 await this.autoSave.forceSave({ config: { provider: this.provider, model: this.model }, state });
                 return new AIMessage((error as JooneError).toRecoveryHint());
             }

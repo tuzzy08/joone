@@ -81,7 +81,7 @@ describe("SessionResumer", () => {
         const resumedState = resumer.prepareForResume(payload);
         
         const lastMsg = resumedState.conversationHistory[resumedState.conversationHistory.length - 1];
-        expect(lastMsg).toBeInstanceOf(SystemMessage);
+        expect(lastMsg).toBeInstanceOf(HumanMessage);
         
         const content = textContent(lastMsg.content);
         expect(content).toContain("[SYSTEM NOTIFICATION: SESSION RESUMED]");

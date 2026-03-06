@@ -37,9 +37,9 @@ export class SessionResumer {
             wakeupPrompt += `- No files in your active context appear to have been edited on the host while you were paused.\n`;
         }
 
-        // Inject as a System Message at the very end of the history
+        // Inject as a Human Message at the very end of the history
         // so it acts as an immediate reminder before the next LLM generation.
-        state.conversationHistory.push(new SystemMessage(wakeupPrompt));
+        state.conversationHistory.push(new HumanMessage(`<system-wakeup>\n${wakeupPrompt}\n</system-wakeup>`));
 
         return state;
     }

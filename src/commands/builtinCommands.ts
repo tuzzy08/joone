@@ -102,10 +102,10 @@ export const CompactCommand: SlashCommand = {
     const evictedCount = history.length - keepLastN;
 
     // Simple string summary (M12 will upgrade to LLM summary)
-    const { SystemMessage } = await import("@langchain/core/messages");
-    const summaryMsg = new SystemMessage(
-      `[Compacted: ${evictedCount} messages removed. ` +
-      `Use /history for details. Conversation continues below.]`
+    const { HumanMessage } = await import("@langchain/core/messages");
+    const summaryMsg = new HumanMessage(
+      `<system-summary>\n[Compacted: ${evictedCount} messages removed. ` +
+      `Use /history for details. Conversation continues below.]\n</system-summary>`
     );
 
     ctx.setContextState({

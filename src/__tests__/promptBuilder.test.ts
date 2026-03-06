@@ -26,18 +26,16 @@ describe("CacheOptimizedPromptBuilder", () => {
 
     const messages = builder.buildPrompt(state);
 
-    // Exactly 3 static messages when history is empty
-    expect(messages).toHaveLength(3);
+    // exactly 1 static message when history is empty
+    expect(messages).toHaveLength(1);
 
-    // All 3 must be system-type messages
+    // must be system-type message
     expect(messages[0]._getType()).toBe("system");
-    expect(messages[1]._getType()).toBe("system");
-    expect(messages[2]._getType()).toBe("system");
 
     // Order must be: global → project → session
     expect(messages[0].content).toContain("You are a coding assistant.");
-    expect(messages[1].content).toContain("Use TypeScript.");
-    expect(messages[2].content).toContain("OS: Windows");
+    expect(messages[0].content).toContain("Use TypeScript.");
+    expect(messages[0].content).toContain("OS: Windows");
   });
 
   // ─── Behavior 2: Conversation history appended AFTER the static prefix ───
@@ -57,19 +55,17 @@ describe("CacheOptimizedPromptBuilder", () => {
 
     const messages = builder.buildPrompt(state);
 
-    // 3 static + 2 conversation = 5
-    expect(messages).toHaveLength(5);
+    // 1 static + 2 conversation = 3
+    expect(messages).toHaveLength(3);
 
-    // First 3 are system messages (static prefix)
+    // First is system messages (static prefix)
     expect(messages[0]._getType()).toBe("system");
-    expect(messages[1]._getType()).toBe("system");
-    expect(messages[2]._getType()).toBe("system");
 
     // Last 2 are conversation messages
-    expect(messages[3]._getType()).toBe("human");
-    expect(messages[4]._getType()).toBe("ai");
-    expect(messages[3].content).toBe("Hello");
-    expect(messages[4].content).toBe("Hi there!");
+    expect(messages[1]._getType()).toBe("human");
+    expect(messages[2]._getType()).toBe("ai");
+    expect(messages[1].content).toBe("Hello");
+    expect(messages[2].content).toBe("Hi there!");
   });
 
   // ─── Behavior 3: Static prefix is identical across calls ───
@@ -93,10 +89,8 @@ describe("CacheOptimizedPromptBuilder", () => {
 
     const secondCall = builder.buildPrompt(state);
 
-    // Static prefix (first 3 messages) must be identical
+    // Static prefix (first message) must be identical
     expect(secondCall[0].content).toBe(firstCall[0].content);
-    expect(secondCall[1].content).toBe(firstCall[1].content);
-    expect(secondCall[2].content).toBe(firstCall[2].content);
   });
 
   // ─── Behavior 4: System reminder is injected as a HumanMessage ───
@@ -139,7 +133,7 @@ describe("CacheOptimizedPromptBuilder", () => {
 
     // Default keepLastN=6, history has 4 → summary + all 4 preserved
     expect(compacted).toHaveLength(5);
-    expect(compacted[0]._getType()).toBe("system");
+    expect(compacted[0]._getType()).toBe("human");
     expect(compacted[0].content).toContain("Completed steps 1 and 2.");
     // Recent messages are preserved after the summary
     expect(compacted[1].content).toBe("Step 1");
