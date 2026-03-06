@@ -135,12 +135,12 @@ describe("ConversationCompactor", () => {
 
     // First message should be the compacted summary
     const summaryMsg = result.compactedHistory[0];
-    expect(summaryMsg._getType()).toBe("system");
+    expect(summaryMsg._getType()).toBe("human");
     expect(typeof summaryMsg.content === "string" && summaryMsg.content).toContain("COMPACTED CONVERSATION SUMMARY");
 
     // Second message should be the handoff
     const handoffMsg = result.compactedHistory[1];
-    expect(handoffMsg._getType()).toBe("system");
+    expect(handoffMsg._getType()).toBe("human");
     expect(typeof handoffMsg.content === "string" && handoffMsg.content).toContain("CONTEXT HANDOFF");
 
     // Remaining should be the last 8 messages from original history
@@ -181,6 +181,8 @@ describe("ConversationCompactor", () => {
 
     // Summary should mention fallback
     const summaryMsg = result.compactedHistory[0];
+    // We didn't change what the text content says, just that it's a HumanMessage now
+    expect(summaryMsg._getType()).toBe("human");
     expect(typeof summaryMsg.content === "string" && summaryMsg.content).toContain("Fallback Compaction");
   });
 
