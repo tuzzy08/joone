@@ -32,6 +32,9 @@ import { SessionStore } from "../core/sessionStore.js";
 import { SessionResumer } from "../core/sessionResumer.js";
 import { PermissionMiddleware } from "../middleware/permission.js";
 import { AskUserQuestionTool } from "../tools/askUser.js";
+import { createDefaultAgentRegistry } from "../agents/builtinAgents.js";
+import { SubAgentManager } from "../core/subAgent.js";
+import { createSpawnAgentTools } from "../tools/spawnAgent.js";
 
 const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 
@@ -423,7 +426,21 @@ program
       // Advanced tools (search, browser, etc.) will be dynamically loaded by the agent later
       // via the SearchToolsTool when the registry is fully integrated
       const { CORE_TOOLS } = await import("../tools/index.js");
-      const tools = [...CORE_TOOLS, AskUserQuestionTool] as import("../tools/index.js").DynamicToolInterface[];
+      let tools = [...CORE_TOOLS, AskUserQuestionTool] as import("../tools/index.js").DynamicToolInterface[];
+      
+      // Initialize Sub-Agent Orchestration
+      const agentRegistry = createDefaultAgentRegistry();
+      const subAgentModelName = config.subAgentModel ?? config.model;
+      
+      // Use the config to determine sub-agent model, with FAST_MODEL_DEFAULTS fallback
+      const { resolveFastModel } = await import("../core/compactor.js");
+      const resolvedSubModel = resolveFastModel(config.provider, config.model, config.subAgentModel);
+      
+      const subAgentLlm = await createModel({ ...config, model: resolvedSubModel });
+      const subAgentManager = new SubAgentManager(agentRegistry, tools, subAgentLlm);
+      const spawnAgentTools = createSpawnAgentTools(subAgentManager, agentRegistry);
+      
+      tools = [...tools, ...spawnAgentTools];
       
       let initialState;
       let sessionId: string | undefined = undefined;

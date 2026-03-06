@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Box, Text, useInput, useApp } from "ink";
 import TextInput from "ink-text-input";
 import { Header } from "./components/Header.js";
@@ -16,6 +16,8 @@ import {
   HITLQuestion,
   HITLPermissionRequest,
 } from "../hitl/bridge.js";
+import { createDefaultRegistry } from "../commands/builtinCommands.js";
+import { CommandRegistry } from "../commands/commandRegistry.js";
 
 export interface Message {
   role: "user" | "agent" | "system";
@@ -47,6 +49,9 @@ export const App: React.FC<AppProps> = ({
   maxTokens,
 }) => {
   const { exit } = useApp();
+
+  // Slash Command Registry — initialized once, stable across renders
+  const commandRegistry = useMemo(() => createDefaultRegistry(), []);
 
   // UI State
   const [messages, setMessages] = useState<Message[]>([
@@ -116,11 +121,44 @@ export const App: React.FC<AppProps> = ({
     return () => clearInterval(interval);
   }, [startTime]);
 
-  // Handle Ctrl+C
-  useInput((input, key) => {
-    if (key.ctrl && input === "c") {
+  // Hold the latest state in a ref for the unmount/signal handlers
+  const stateRef = React.useRef(contextState);
+  useEffect(() => {
+    stateRef.current = contextState;
+  }, [contextState]);
+
+  const performGracefulExit = async () => {
+    try {
+      await harness.autoSave.forceSave({
+        config: { provider, model },
+        state: stateRef.current,
+      });
+    } catch (e) {
+      // Ignore errors during exit
+    } finally {
       exit();
       process.exit(0);
+    }
+  };
+
+  useEffect(() => {
+    const handleSignal = () => {
+      performGracefulExit();
+    };
+
+    process.on("SIGINT", handleSignal);
+    process.on("SIGTERM", handleSignal);
+
+    return () => {
+      process.off("SIGINT", handleSignal);
+      process.off("SIGTERM", handleSignal);
+    };
+  }, [provider, model, harness, exit]);
+
+  // Handle Ctrl+C (Keyboard)
+  useInput((input, key) => {
+    if (key.ctrl && input === "c") {
+      performGracefulExit();
     }
   });
 
@@ -215,11 +253,66 @@ export const App: React.FC<AppProps> = ({
     }
   };
 
-  const handleSubmit = (query: string) => {
+  const handleSubmit = async (query: string) => {
     if (!query.trim() || isProcessing) return;
 
     const userText = query.trim();
     setInputValue("");
+
+    // ── Slash Command Interception ──
+    // Commands starting with "/" are handled locally at zero LLM cost.
+    if (commandRegistry.isCommand(userText)) {
+      setMessages((prev) => [...prev, { role: "user", content: userText }]);
+
+      const commandContext = {
+        config: {
+          provider,
+          model,
+          maxTokens,
+          streaming,
+          temperature: 0,
+        } as any,
+        configPath: "",
+        harness,
+        contextState,
+        setContextState,
+        addSystemMessage: (content: string) => {
+          setMessages((prev) => [...prev, { role: "system", content }]);
+        },
+        provider,
+        model,
+        maxTokens,
+      };
+
+      try {
+        const result = await commandRegistry.execute(userText, commandContext);
+
+        // Handle /exit signal
+        if (result === "__EXIT__") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "system", content: "Goodbye! 👋" },
+          ]);
+          setTimeout(() => {
+            exit();
+            process.exit(0);
+          }, 500);
+          return;
+        }
+
+        if (result) {
+          setMessages((prev) => [...prev, { role: "system", content: result }]);
+        }
+      } catch (err: any) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `Command error: ${err.message}` },
+        ]);
+      }
+      return;
+    }
+
+    // ── Normal Agent Message ──
     setIsProcessing(true);
 
     // 1. Update UI

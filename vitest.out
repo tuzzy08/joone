@@ -1,0 +1,48 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mC:/Users/Lenovo/Desktop/New folder/joone[39m
+
+ [31m❯[39m tests/core/stability.test.ts [2m([22m[2m7 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 84[2mms[22m[39m
+[31m     [31m×[31m does nothing when under the warn threshold[39m[32m 26[2mms[22m[39m
+     [32m✓[39m triggers LLM compaction when over WARN but under CRITICAL threshold[32m 2[2mms[22m[39m
+[31m     [31m×[31m compacts via promptBuilder when 80-95% full[39m[32m 8[2mms[22m[39m
+     [32m✓[39m only saves when frequency and debounce thresholds are met[32m 3[2mms[22m[39m
+     [32m✓[39m respects debounce time even if frequency is met[32m 1[2mms[22m[39m
+     [32m✓[39m forceSave bypasses thresholds[32m 1[2mms[22m[39m
+     [32m✓[39m swallows errors to prevent crashing the agent loop[32m 37[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/core/stability.test.ts[2m > [22mContextGuard[2m > [22mdoes nothing when under the warn threshold
+[31m[1mAssertionError[22m: expected 'compacted' to be 'none' // Object.is equality[39m
+
+Expected: [32m"none"[39m
+Received: [31m"compacted"[39m
+
+[36m [2m❯[22m tests/core/stability.test.ts:[2m41:33[22m[39m
+    [90m 39| [39m    const { state: updatedState, metrics } = await guard.ensureCapacit…
+    [90m 40| [39m
+    [90m 41| [39m    [34mexpect[39m(metrics[33m.[39mactionTaken)[33m.[39m[34mtoBe[39m([32m"none"[39m)[33m;[39m
+    [90m   | [39m                                [31m^[39m
+    [90m 42| [39m    [34mexpect[39m(updatedState[33m.[39mconversationHistory[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m5[39m)[33m;[39m
+    [90m 43| [39m  })[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/core/stability.test.ts[2m > [22mContextGuard Algebraic Logic[2m > [22mcompacts via promptBuilder when 80-95% full
+[31m[1mAssertionError[22m: expected [ 'compacted', 'emergency_truncated' ] to include 'none'[39m
+[36m [2m❯[22m tests/core/stability.test.ts:[2m95:50[22m[39m
+    [90m 93| [39m
+    [90m 94| [39m    [90m// It should hit compactness or emergency[39m
+    [90m 95| [39m    expect(["compacted", "emergency_truncated"]).toContain(metrics.act…
+    [90m   | [39m                                                 [31m^[39m
+    [90m 96| [39m  })[33m;[39m
+    [90m 97| [39m})[33m;[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m5 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 16:46:44
+[2m   Duration [22m 2.69s[2m (transform 488ms, setup 0ms, import 2.01s, tests 84ms, environment 1ms)[22m
+

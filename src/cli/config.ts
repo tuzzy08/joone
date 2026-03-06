@@ -29,6 +29,10 @@ export interface JooneConfig {
   langsmithProject?: string;
   /** Tool permission mode: 'auto' (no prompts), 'ask_dangerous' (prompt for destructive tools), 'ask_all' (prompt for everything). */
   permissionMode?: "auto" | "ask_dangerous" | "ask_all";
+  /** Override model for context compaction (default: auto-selected fast model from same provider). */
+  compactModel?: string;
+  /** Override model for sub-agents (default: auto-selected fast model from same provider). */
+  subAgentModel?: string;
 }
 
 /**

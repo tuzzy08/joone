@@ -11,6 +11,8 @@ import { SessionStore } from "./sessionStore.js";
 import { retryWithBackoff } from "./retry.js";
 import { wrapLLMError, JooneError, ToolExecutionError } from "./errors.js";
 import { SystemMessage } from "@langchain/core/messages";
+import { ContextGuard } from "./contextGuard.js";
+import { AutoSave } from "./autoSave.js";
 
 export interface StreamStepOptions {
     /** Called for each text token received from the stream. */
@@ -27,6 +29,8 @@ export class ExecutionHarness {
     public sessionId: string;
     private provider: string;
     private model: string;
+    private contextGuard: ContextGuard;
+    public autoSave: AutoSave;
     
     /**
      * Initializes the harness with a pre-configured, tool-bound LLM instance.
@@ -39,7 +43,8 @@ export class ExecutionHarness {
         tracer?: SessionTracer,
         provider: string = "unknown",
         model: string = "unknown",
-        sessionId?: string
+        sessionId?: string,
+        maxTokens: number = 4096
     ) {
         this.llm = boundLlm;
         this.promptBuilder = new CacheOptimizedPromptBuilder();
@@ -50,6 +55,8 @@ export class ExecutionHarness {
         this.sessionId = sessionId ?? this.tracer.getSessionId();
         this.provider = provider;
         this.model = model;
+        this.contextGuard = new ContextGuard(this.llm, maxTokens, this.promptBuilder);
+        this.autoSave = new AutoSave(this.sessionId, this.sessionStore);
     }
 
     /**
@@ -58,6 +65,11 @@ export class ExecutionHarness {
      */
     public async step(state: ContextState): Promise<AIMessage> {
         const start = Date.now();
+        
+        // ContextGuard: Check capacity before building prompt
+        const { state: updatedState, metrics } = await this.contextGuard.ensureCapacity(state);
+        state = updatedState; // Reassign state if compacted
+        
         const messages = this.promptBuilder.buildPrompt(state);
 
         try {
@@ -80,14 +92,14 @@ export class ExecutionHarness {
                 duration: Date.now() - start
             });
 
-            await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+            await this.autoSave.tick({ config: { provider: this.provider, model: this.model }, state });
             return response as AIMessage;
         } catch (error: unknown) {
             // Self-recovery: inject the error hint and let the agent adapt
             if (error instanceof JooneError && error.retryable) {
                 this.tracer.recordError({ message: `LLM retries exhausted: ${error.message}` });
                 state.conversationHistory.push(new SystemMessage(error.toRecoveryHint()));
-                await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+                await this.autoSave.forceSave({ config: { provider: this.provider, model: this.model }, state });
                 // Return a synthetic AI message so the turn doesn't crash
                 return new AIMessage(error.toRecoveryHint());
             }
@@ -105,6 +117,11 @@ export class ExecutionHarness {
         options: StreamStepOptions
     ): Promise<AIMessage> {
         const start = Date.now();
+        
+        // ContextGuard: Check capacity before building prompt
+        const { state: updatedState, metrics } = await this.contextGuard.ensureCapacity(state);
+        state = updatedState;
+        
         const messages = this.promptBuilder.buildPrompt(state);
 
         try {
@@ -181,14 +198,14 @@ export class ExecutionHarness {
                 duration: Date.now() - start
             });
 
-            await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+            await this.autoSave.tick({ config: { provider: this.provider, model: this.model }, state });
             return result;
         } catch (error: unknown) {
             // Self-recovery for streaming
             if (error instanceof JooneError && error.retryable) {
                 this.tracer.recordError({ message: `LLM stream retries exhausted: ${(error as JooneError).message}` });
                 state.conversationHistory.push(new SystemMessage((error as JooneError).toRecoveryHint()));
-                await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+                await this.autoSave.forceSave({ config: { provider: this.provider, model: this.model }, state });
                 return new AIMessage((error as JooneError).toRecoveryHint());
             }
             throw error;
@@ -288,7 +305,7 @@ export class ExecutionHarness {
 
         // Add the tool results to the state immediately before saving
         state.conversationHistory.push(...results);
-        await this.sessionStore.saveSession(this.sessionId, state, this.provider, this.model);
+        await this.autoSave.tick({ config: { provider: this.provider, model: this.model }, state });
 
         return results;
     }

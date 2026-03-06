@@ -88,6 +88,11 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 - ✅ **M8: OpenSandbox Fallback:** `ISandboxWrapper`, local docker degradation at `localhost:8080`, and documented NFRs (Rate Limits & Budgets).
 - ✅ **M9: Persistent Sessions:** `SessionStore` (JSONL), `SessionResumer` (host drift detection), `joone sessions` dashboard, `joone start --resume <id>`.
 - ✅ **M10: Retry, HITL, Skills Sync:** `JooneError` hierarchy + `retryWithBackoff`, `HITLBridge` + `AskUserQuestionTool` + `PermissionMiddleware`, user-level skills sandbox sync.
+- ✅ **M11: Slash Command System:** `CommandRegistry` + 10 built-in `/commands` (`/help`, `/model`, `/clear`, `/compact`, `/tokens`, `/status`, `/exit`, `/history`, `/undo`) intercepted in TUI before agent loop (zero LLM cost).
+
+- ✅ **M12: LLM-Powered Compaction:** LLM-driven `ConversationCompactor`, fast model mapping (`FAST_MODEL_DEFAULTS`), and seamless handoff prompts post-compaction.
+- ✅ **M13: Sub-Agent Orchestration:** `AgentRegistry`, isolated sync/async `SubAgentManager`, and safe `spawn_agent` + `check_agent` tools (Depth-1 limits).
+- ✅ **M14: Stability & Reliability:** `ContextGuard` (80% auto-compact, 95% emergency truncation), `AutoSave` (debounced JSONL persistence), and atomic TUI `SIGINT/SIGTERM` handling.
 
 ### Tool Routing Summary
 
@@ -98,13 +103,13 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 | `web_search` (API call)           | `browser` (agent-browser CLI)       |
 | `search_skills`, `load_skill`     | Unknown tools (safe-by-default)     |
 | `ask_user_question`               |                                     |
+| `/commands` (TUI-only, no LLM)    |                                     |
+| `spawn_agent`, `check_agent`      |                                     |
 
 ### Pending Next Steps (Where to resume)
 
-**Start on Milestone 7: Testing & Evaluations (Evals).**
+**Continue with Milestone 15:**
 
-1.  **LangSmith Evals**: Hook LangSmith datasets up to the `ExecutionHarness` to run regression tests against known code tasks.
-2.  **Dataset CI**: Build `joone eval` or similar offline script to assert Cache Hit Rate > 90% and Cost < $X per conversation.
-3.  **Security Keychain Integration**: Move API keys from plaintext JSON into OS keychain (Tier 2 security).
+1.  **M15: MCP Client Integration** — `@modelcontextprotocol/sdk`, stdio/HTTP transport, namespaced MCP tools.
 
-_Reference `docs/08_roadmap.md` and `task.md` (in the agent brain) for the full checklist._
+_Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

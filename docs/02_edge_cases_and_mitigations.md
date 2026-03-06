@@ -99,3 +99,45 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
 - **Skill Name Collision (Project vs. User):**
   - _The Edge Case:_ A user-level skill and a project-level skill have the same name. Both get synced to the sandbox, creating confusion.
   - _Mitigation:_ `SkillLoader.discoverSkills()` deduplicates by name with project-level priority. `syncSkillsToSandbox()` only uploads `source: "user"` skills since project-level skills are already inside `projectRoot`.
+
+## 8. Slash Command Edge Cases (M11)
+
+- **Command Typos & Frustration:**
+  - _The Edge Case:_ User types `/modle` instead of `/model` and the agent treats it as a prompt, wasting LLM tokens and failing to switch the model.
+  - _Mitigation:_ Levenshtein distance check in `CommandRegistry`. If an unknown command is `< 3` edits away from a known command, the TUI intercepts it and suggests the correct command without calling the LLM.
+- **State Mutation While Processing:**
+  - _The Edge Case:_ User runs `/exit` or `/clear` while the agent is midway through generating a sequence of ToolCalls.
+  - _Mitigation:_ App-level UI blocks input while `isProcessing === true`. The commands are disabled.
+- **Model Switch to Non-Existent Model:**
+  - _The Edge Case:_ User runs `/model nonexistent`.
+  - _Mitigation:_ The command validates the model string against `ConfigManager`'s available models and securely rejects it before updating internal state.
+
+## 9. LLM-Powered Compaction Edge Cases (M12)
+
+- **Compaction Data Loss (Amnesia 2.0):**
+  - _The Edge Case:_ The LLM summarizes a 50-turn conversation but drops explicit file paths or tool choices, leaving the main agent blind when resuming.
+  - _Mitigation:_ The built-in Compact Prompt explicitly mandates a structured format: `Files Modified`, `Decisions Made`, `Tools Used`. A handoff prompt (`[CONTEXT HANDOFF]`) is injected into the bottom of the history to glue the summary back to the agent's persona.
+- **Double Compaction Fidelity Loss:**
+  - _The Edge Case:_ A session exists so long it must be compacted twice. A "summary of a summary" loses critical resolution.
+  - _Mitigation:_ `ConversationCompactor` detects prior summaries and includes them entirely in the eviction block, prompting the LLM to unify the old summary with the new evicted messages.
+
+## 10. Sub-Agent Orchestration Edge Cases (M13)
+
+- **The Sub-Agent Recursion Bomb:**
+  - _The Edge Case:_ A sub-agent uses the `spawn_agent` tool to spawn another sub-agent, creating an infinite nesting loop.
+  - _Mitigation:_ Hardcoded Depth-1 limit. Pre-configured sub-agents in `AgentRegistry` never include `spawn_agent` or `check_agent` in their allowed toolsets.
+- **Async Resource Contention:**
+  - _The Edge Case:_ The main agent loops over a directory and spawns 50 async `test_runner` agents concurrently.
+  - _Mitigation:_ `SubAgentManager` maintains a hard cap of 3 concurrent async tasks. Further spawn requests are queued or rejected with a backpressure error tool response.
+- **Stale Files in Sandbox:**
+  - _The Edge Case:_ The main agent edits a file on the host, then immediately spawns a `bash` sub-agent. The sub-agent runs in the sandbox before the new host file is synced.
+  - _Mitigation:_ The `SubAgentManager` shares the main harness's `FileSync` instance and always forces a `syncToSandbox()` pass _before_ the sub-agent takes its first step.
+
+## 11. Stability & Reliability Edge Cases (M14)
+
+- **Context Window Overflows (Instant Death):**
+  - _The Edge Case:_ Despite compaction thresholds, a single `read_file` returns 120k tokens string, instantly blowing past the 100% capacity mark. Compaction fails because the context is already overflowing.
+  - _Mitigation:_ `ContextGuard` has a 95% "Emergency Truncation" threshold. Before hitting the API, if tokens > 95%, it _bypasses_ LLM compaction and brutally slices all but the last 4 messages, inserting a loud warning message directly into the stream, guaranteeing survival.
+- **Process Death Serialization Tearing:**
+  - _The Edge Case:_ The `AutoSave` triggers at the exact millisecond the user presses `Ctrl+C`. The Node process terminates while `fs.writeFileSync` is mid-chunk, corrupting the JSONL session file irreversibly.
+  - _Mitigation:_ Atomic saves. `SessionStore.saveSession()` writes to an intermediate staging stream. On `process.on('SIGINT')`, a synchronous `forceSave()` is fired to cleanly flush state _before_ `process.exit(0)`.

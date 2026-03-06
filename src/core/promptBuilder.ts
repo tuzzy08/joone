@@ -4,7 +4,10 @@ import {
   HumanMessage,
   AIMessage,
 } from "@langchain/core/messages";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { Runnable } from "@langchain/core/runnables";
 import { countMessageTokens } from "./tokenCounter.js";
+import { ConversationCompactor, CompactionResult } from "./compactor.js";
 
 export interface ContextState {
   globalSystemInstructions: string;
@@ -69,7 +72,7 @@ export class CacheOptimizedPromptBuilder {
   }
 
   /**
-   * Cache-Safe Compaction
+   * Cache-Safe Compaction (string-based fallback)
    * When history gets too long, we preserve the last N messages (recent context)
    * and replace older messages with a summary. The static system prefix is untouched.
    *
@@ -99,6 +102,26 @@ export class CacheOptimizedPromptBuilder {
   }
 
   /**
+   * LLM-Powered Compaction with Handoff
+   * Uses a dedicated LLM call to generate a structured summary, then injects
+   * a handoff prompt to orient the agent. Falls back to string-based compaction
+   * if the LLM call fails.
+   *
+   * @param history - The full conversation history.
+   * @param llm - The LLM to use for summarization (should be a fast/cheap model).
+   * @param keepLastN - Number of recent messages to preserve (default: 8).
+   * @returns CompactionResult with the new history and metrics.
+   */
+  public async compactHistoryWithLLM(
+    history: BaseMessage[],
+    llm: Runnable | BaseChatModel,
+    keepLastN = 8,
+  ): Promise<CompactionResult> {
+    const compactor = new ConversationCompactor();
+    return compactor.compact(history, llm, { keepLastN });
+  }
+
+  /**
    * Checks if the conversation should be compacted based on token usage.
    *
    * @param state - The current context state.
@@ -115,3 +138,4 @@ export class CacheOptimizedPromptBuilder {
     return usage >= maxTokens * threshold;
   }
 }
+

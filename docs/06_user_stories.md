@@ -42,7 +42,31 @@ This document contains the foundational user stories for the Joone agent, organi
 - **US 6.3**: As an agent trying to finish a task, I want a `PreCompletionMiddleware` to ask me if I have run tests. If I haven't, it should block completion and ask me to run verifications.
 - **US 6.4**: As the system, I want to parse test exit codes; if a test fails (`exit 1`), I want to block the agent from declaring the task "Done" unless a max retry limit is reached.
 
-## Epic 7: Analytics & Tracing
-
 - **US 7.1**: As an operator, I want every agent decision, tool call, and token metric logged to a standard trace format so I can monitor cache hit rates.
 - **US 7.2**: As an operator, I want a script that can read failed traces and use an LLM to automatically summarize _why_ the agent failed tasks, allowing me to refine the harness.
+
+## Epic 8: TUI Slash Commands (M11)
+
+- **US 8.1**: As a user, I want to type `/help` or `/?` to see a list of all available commands without making an LLM call.
+- **US 8.2**: As a user, I want to switch models mid-session securely by typing `/model <name>`.
+- **US 8.3**: As a user with a bloated history context, I want to type `/compact` to manually force a context summarization.
+- **US 8.4**: As an error-prone user, if I type `/cls` instead of `/clear`, I want the UI to suggest `/clear` via Levenshtein distance grouping instead of sending garbage tokens to the API.
+
+## Epic 9: LLM-Powered Compaction (M12)
+
+- **US 9.1**: As an agent managing a huge conversation history, I want to delegate summarization of my older messages to an LLM, so the resulting summary is precise, preserving file paths and tool outcomes perfectly.
+- **US 9.2**: As the system, I want to automatically select a cheaper, faster LLM model (like `gpt-4o-mini` instead of `gpt-4o`) to perform the background compaction, saving the user money.
+- **US 9.3**: As a resumed agent, I want a seamless Handoff Prompt injected directly beneath the compaction summary, so I instantly understand my persona and context haven't broken.
+
+## Epic 10: Sub-Agent Orchestration (M13)
+
+- **US 10.1**: As the main reasoning agent, I want the ability to spawn named "sub-agents" to handle specialized tasks (e.g., executing scripts, analyzing directories) so I don't clutter my own context overhead.
+- **US 10.2**: As the main agent, I want to spawn certain sub-agents asynchronously, allowing me to continue reasoning or writing files while the sub-agent scans tests in the background.
+- **US 10.3**: As an orchestrator, I want hard limitations (a Depth-1 limit) that strictly prevent a sub-agent from accidentally spawning another sub-agent ad infinitum.
+
+## Epic 11: Stability & Reliability (M14)
+
+- **US 11.1**: As the core engine, I want a proactive `ContextGuard` that estimates API token payloads before sending the request to the provider, automatically triggering compaction at 80% usage.
+- **US 11.2**: As the core engine, I want an absolute Emergency Truncation trap door at 95% capacity to prevent immediate process death when compaction isn't fast enough.
+- **US 11.3**: As a user working on a long-running complex task, I want the `AutoSave` feature to quietly save my `.jsonl` session file atomically in the background every few turns.
+- **US 11.4**: As a user, when I hit `Ctrl+C` in my terminal, I want the CLI to intercept the shutdown signal, force a final instantaneous save, and clean up the sandbox before exiting.

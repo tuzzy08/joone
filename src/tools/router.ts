@@ -21,6 +21,8 @@ const HOST_TOOLS = new Set([
   "web_search",
   "search_skills",
   "load_skill",
+  "spawn_agent",
+  "check_agent",
 ]);
 
 /**
