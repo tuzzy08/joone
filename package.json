@@ -1,5 +1,5 @@
 {
-  "name": "joone",
+  "name": "joonecli",
   "version": "0.1.0",
   "description": "An autonomous coding agent",
   "main": "dist/cli/index.js",
