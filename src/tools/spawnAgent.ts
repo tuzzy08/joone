@@ -13,6 +13,7 @@ import { DynamicToolInterface, ToolResult } from "./index.js";
 import { SubAgentManager } from "../core/subAgent.js";
 import { SubAgentResult } from "../agents/agentSpec.js";
 import { AgentRegistry } from "../agents/agentRegistry.js";
+import { AgentEventEmitter } from "../core/events.js";
 
 // ─── Factory ────────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,8 @@ export function createSpawnAgentTools(
       agent: string;
       task: string;
       mode?: "sync" | "async";
-    }): Promise<ToolResult> => {
+    }, emitter?: AgentEventEmitter): Promise<ToolResult> => {
+      if (emitter) emitter.emit("agent:event", { type: "subagent:spawn", agentName: args.agent, task: args.task });
       const mode = args.mode ?? "sync";
 
       if (mode === "async") {

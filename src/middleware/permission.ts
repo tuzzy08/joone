@@ -21,6 +21,7 @@ const DANGEROUS_TOOLS = new Set([
     "replace_file_content",
     "multi_replace_file_content",
     "install_deps",
+    "install_host_dependencies",
 ]);
 
 /**

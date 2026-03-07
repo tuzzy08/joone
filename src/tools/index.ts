@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { SandboxManager } from "../sandbox/manager.js";
 import { FileSync } from "../sandbox/sync.js";
+import { AgentEventEmitter } from "../core/events.js";
+import { InstallHostDependenciesTool } from "./installHostDeps.js";
 
 export interface ToolResult {
     content: string;
@@ -13,7 +15,7 @@ export interface DynamicToolInterface {
     name: string;
     description: string;
     schema: Record<string, any>;
-    execute: (args: any) => Promise<ToolResult> | ToolResult;
+    execute: (args: any, emitter?: AgentEventEmitter) => Promise<ToolResult> | ToolResult;
 }
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
@@ -71,7 +73,8 @@ export const BashTool: DynamicToolInterface = {
         },
         required: ["command"],
     },
-    execute: async (args: { command: string }): Promise<ToolResult> => {
+    execute: async (args: { command: string }, emitter?: AgentEventEmitter): Promise<ToolResult> => {
+        if (emitter) emitter.emit("agent:event", { type: "system:script_exec", command: args.command, location: "sandbox" });
         if (!_sandboxManager || !_sandboxManager.isActive()) {
             throw new Error(
                 "Sandbox is not active. Cannot execute bash commands without an active sandbox session."
@@ -127,8 +130,9 @@ export const ReadFileTool: DynamicToolInterface = {
         },
         required: ["path"],
     },
-    execute: async (args: { path: string; startLine?: number; endLine?: number }): Promise<ToolResult> => {
+    execute: async (args: { path: string; startLine?: number; endLine?: number }, emitter?: AgentEventEmitter): Promise<ToolResult> => {
         const filePath = path.resolve(args.path);
+        if (emitter) emitter.emit("agent:event", { type: "file:io", action: "read", path: filePath });
 
         // ── Security Guardrail ──
         if (!isPathInsideWorkspace(filePath)) {
@@ -200,8 +204,9 @@ export const WriteFileTool: DynamicToolInterface = {
         },
         required: ["path", "content"],
     },
-    execute: async (args: { path: string; content: string }): Promise<ToolResult> => {
+    execute: async (args: { path: string; content: string }, emitter?: AgentEventEmitter): Promise<ToolResult> => {
         const filePath = path.resolve(args.path);
+        if (emitter) emitter.emit("agent:event", { type: "file:io", action: "write", path: filePath });
 
         // ── Security Guardrail ──
         if (!isPathInsideWorkspace(filePath)) {
@@ -234,4 +239,5 @@ export const CORE_TOOLS: DynamicToolInterface[] = [
     BashTool,
     ReadFileTool,
     WriteFileTool,
+    InstallHostDependenciesTool,
 ];

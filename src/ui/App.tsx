@@ -7,6 +7,8 @@ import { MessageBubble } from "./components/MessageBubble.js";
 import { StreamingText } from "./components/StreamingText.js";
 import { ToolCallPanel, ToolCallStatus } from "./components/ToolCallPanel.js";
 import { HITLPrompt } from "./components/HITLPrompt.js";
+import { ActionLog } from "./components/ActionLog.js";
+import { FileBrowser } from "./components/FileBrowser.js";
 import { ExecutionHarness } from "../core/agentLoop.js";
 import { ContextState } from "../core/promptBuilder.js";
 import { countMessageTokens } from "../core/tokenCounter.js";
@@ -344,68 +346,85 @@ export const App: React.FC<AppProps> = ({
     <Box flexDirection="column" minHeight={15}>
       <Header provider={provider} model={model} streaming={streaming} />
 
-      <Box flexDirection="column" paddingY={1}>
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} role={msg.role} content={msg.content} />
-        ))}
+      <Box flexDirection="row" flexGrow={1} width="100%">
+        {/* LEFT COLUMN: Chat & Interactive Area */}
+        <Box flexDirection="column" width="65%" paddingRight={1}>
+          <Box flexDirection="column" paddingY={1}>
+            {messages.map((msg, i) => (
+              <MessageBubble key={i} role={msg.role} content={msg.content} />
+            ))}
+          </Box>
+
+          {isStreaming && (
+            <Box paddingX={1} marginBottom={1}>
+              <Box marginLeft={2}>
+                <StreamingText
+                  tokens={streamingTokens}
+                  isStreaming={isStreaming}
+                />
+              </Box>
+            </Box>
+          )}
+
+          {activeToolCall && (
+            <Box paddingX={1} marginBottom={1}>
+              <ToolCallPanel
+                toolName={activeToolCall.name}
+                args={activeToolCall.args}
+                status={activeToolCall.status}
+                result={activeToolCall.result}
+              />
+            </Box>
+          )}
+
+          {/* Interactive Prompt Area */}
+          {(hitlQuestion || hitlPermission) && (
+            <HITLPrompt question={hitlQuestion} permission={hitlPermission} />
+          )}
+
+          {!isProcessing && !hitlQuestion && !hitlPermission && (
+            <Box paddingX={1} marginBottom={1}>
+              <Box marginRight={1}>
+                <Text color="green" bold>
+                  ❯
+                </Text>
+              </Box>
+              <TextInput
+                value={inputValue}
+                onChange={setInputValue}
+                onSubmit={handleSubmit}
+                placeholder="What should we build today?"
+              />
+            </Box>
+          )}
+
+          {isProcessing && !isStreaming && !activeToolCall && (
+            <Box paddingX={1} marginBottom={1}>
+              <Text dimColor>Thinking...</Text>
+            </Box>
+          )}
+        </Box>
+
+        {/* RIGHT COLUMN: Dashboards */}
+        <Box flexDirection="column" width="35%" paddingLeft={1}>
+          <StatusBar
+            contextTokens={contextTokens}
+            maxContextTokens={contextTokensLimit}
+            totalTokens={summary.totalTokens}
+            cacheHitRate={summary.cacheHitRate}
+            toolCalls={summary.toolCallCount}
+            turns={summary.turnCount}
+            cost={summary.totalCost}
+            elapsed={elapsed}
+          />
+          <Box marginTop={1}>
+            <FileBrowser />
+          </Box>
+          <Box marginTop={1}>
+            <ActionLog emitter={harness} />
+          </Box>
+        </Box>
       </Box>
-
-      {isStreaming && (
-        <Box paddingX={1} marginBottom={1}>
-          <Box marginLeft={2}>
-            <StreamingText tokens={streamingTokens} isStreaming={isStreaming} />
-          </Box>
-        </Box>
-      )}
-
-      {activeToolCall && (
-        <Box paddingX={1} marginBottom={1}>
-          <ToolCallPanel
-            toolName={activeToolCall.name}
-            args={activeToolCall.args}
-            status={activeToolCall.status}
-            result={activeToolCall.result}
-          />
-        </Box>
-      )}
-
-      {/* Interactive Prompt Area */}
-      {(hitlQuestion || hitlPermission) && (
-        <HITLPrompt question={hitlQuestion} permission={hitlPermission} />
-      )}
-
-      {!isProcessing && !hitlQuestion && !hitlPermission && (
-        <Box paddingX={1} marginBottom={1}>
-          <Box marginRight={1}>
-            <Text color="green" bold>
-              ❯
-            </Text>
-          </Box>
-          <TextInput
-            value={inputValue}
-            onChange={setInputValue}
-            onSubmit={handleSubmit}
-            placeholder="What should we build today?"
-          />
-        </Box>
-      )}
-
-      {isProcessing && !isStreaming && !activeToolCall && (
-        <Box paddingX={1} marginBottom={1}>
-          <Text dimColor>Thinking...</Text>
-        </Box>
-      )}
-
-      <StatusBar
-        contextTokens={contextTokens}
-        maxContextTokens={contextTokensLimit}
-        totalTokens={summary.totalTokens}
-        cacheHitRate={summary.cacheHitRate}
-        toolCalls={summary.toolCallCount}
-        turns={summary.turnCount}
-        cost={summary.totalCost}
-        elapsed={elapsed}
-      />
     </Box>
   );
 };

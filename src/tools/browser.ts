@@ -1,6 +1,7 @@
 import { SandboxManager } from "../sandbox/manager.js";
 import { LazyInstaller } from "../sandbox/bootstrap.js";
 import { DynamicToolInterface, ToolResult } from "./index.js";
+import { AgentEventEmitter } from "../core/events.js";
 
 // ─── Sandbox + Installer references ─────────────────────────────────────────
 
@@ -80,7 +81,10 @@ export const BrowserTool: DynamicToolInterface = {
     ref?: string;
     text?: string;
     direction?: string;
-  }): Promise<ToolResult> => {
+  }, emitter?: AgentEventEmitter): Promise<ToolResult> => {
+    if (args.action === "navigate" && args.url && emitter) {
+        emitter.emit("agent:event", { type: "browser:nav", url: args.url });
+    }
     if (!_sandboxManager || !_sandboxManager.isActive()) {
       return { content: "Sandbox is not active. Cannot use browser tool.", isError: true };
     }

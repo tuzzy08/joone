@@ -13,13 +13,15 @@ import { wrapLLMError, JooneError, ToolExecutionError } from "./errors.js";
 import { SystemMessage } from "@langchain/core/messages";
 import { ContextGuard, getProviderContextLimit } from "./contextGuard.js";
 import { AutoSave } from "./autoSave.js";
+import { EventEmitter } from "node:events";
+import { AgentEvent, AgentEventEmitter } from "./events.js";
 
 export interface StreamStepOptions {
     /** Called for each text token received from the stream. */
     onToken?: (token: string) => void;
 }
 
-export class ExecutionHarness {
+export class ExecutionHarness extends EventEmitter implements AgentEventEmitter {
     private llm: Runnable<any, AIMessageChunk> | BaseChatModel;
     private promptBuilder: CacheOptimizedPromptBuilder;
     private availableTools: DynamicToolInterface[];
@@ -46,6 +48,7 @@ export class ExecutionHarness {
         sessionId?: string,
         maxTokens: number = 4096
     ) {
+        super();
         this.llm = boundLlm;
         this.promptBuilder = new CacheOptimizedPromptBuilder();
         this.availableTools = tools;
@@ -146,6 +149,7 @@ export class ExecutionHarness {
                             if (options.onToken) {
                                 options.onToken(chunk.content);
                             }
+                            this.emit("agent:event", { type: "agent:stream", token: chunk.content });
                         }
 
                         if (chunk.tool_call_chunks && chunk.tool_call_chunks.length > 0) {
@@ -269,6 +273,7 @@ export class ExecutionHarness {
             };
 
             const start = Date.now();
+            this.emit("agent:event", { type: "tool:start", toolName: call.name, args: JSON.stringify(call.args) });
             try {
                 const output = await this.pipeline.run(
                     ctx,
@@ -283,6 +288,7 @@ export class ExecutionHarness {
                 });
                 
                 const stringifiedOutput = typeof output === "string" ? output : JSON.stringify(output);
+                this.emit("agent:event", { type: "tool:end", toolName: call.name, result: stringifiedOutput, durationMs: Date.now() - start });
                 results.push(new ToolMessage({
                     content: stringifiedOutput,
                     tool_call_id: safeCallId
@@ -301,6 +307,7 @@ export class ExecutionHarness {
                     success: false
                 });
                 this.tracer.recordError({ message: toolError.message, tool: call.name });
+                this.emit("agent:event", { type: "tool:end", toolName: call.name, result: `Error: ${toolError.message}`, durationMs: Date.now() - start });
                 results.push(new ToolMessage({
                     content: toolError.toRecoveryHint(),
                     tool_call_id: safeCallId

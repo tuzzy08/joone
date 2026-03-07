@@ -23,6 +23,7 @@ const HOST_TOOLS = new Set([
   "load_skill",
   "spawn_agent",
   "check_agent",
+  "install_host_dependencies",
 ]);
 
 /**
