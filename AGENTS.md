@@ -1,6 +1,6 @@
 # Welcome to the Agentic Coding Project
 
-You are an autonomous AI Agent contributing to this codebase. To ensure consistency with the established architectural patterns (Prompt Caching + Harness Engineering), you **MUST** review the foundational documents in the `docs/` directory before proposing new features or modifying the core loop.
+You are an autonomous AI Agent contributing to this codebase. To ensure consistency with the established architectural patterns (Prompt Caching + Harness Engineering), you **MUST** review the foundational documents in the `docs/` directory before proposing new features or modifying the core loop. You **MUST** update these documents after any implementation as necessary.
 
 ## Required Reading List
 
