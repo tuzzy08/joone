@@ -2,12 +2,10 @@
   "name": "joonecli",
   "version": "0.2.0",
   "description": "An autonomous coding agent",
+  "files": ["dist"],
   "main": "dist/cli/index.js",
   "bin": {
-    "joone": "./dist/cli/index.js"
-  },
-  "directories": {
-    "doc": "docs"
+    "joone": "dist/cli/index.js"
   },
   "scripts": {
     "build": "tsc",
