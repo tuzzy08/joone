@@ -78,27 +78,33 @@ graph TD
    - Maintains the "Prefix Match". Compiles the static system prompt, appends project variables once, and exclusively appends subsequent messages.
 
 3. **Execution Engine** (`src/core/agentLoop.ts`):
+   - Initializes by explicitly natively binding tools to the incoming generic model via `.bindTools(tools)` to prevent raw output truncation.
    - Polls the LLM via `.stream()` (default) or `.invoke()`.
    - The **Stream Handler** prints text tokens to stdout in real-time and buffers tool call JSON chunks until complete.
-   - Routes completed tool calls to the Middleware pipeline.
+   - Routes completed tool calls to the Middleware pipeline and extracts precise provider `CacheMetrics` for the tracer.
 
-4. **Middleware Orchestrator** (`src/middleware/`):
+4. **ContextGuard** (`src/core/contextGuard.ts`):
+   - Proactively checks token payload size _before_ querying the API.
+   - Decouples UI Context Limits from config generation limits using `getProviderContextLimit` (e.g. tracking against 1M tokens for Gemini rather than 4096 output tokens).
+   - Auto-triggers LLM compaction at 80%, with a 95% Emergency Truncation fallback to prevent OOM process deaths.
+
+5. **Middleware Orchestrator** (`src/middleware/`):
    - Implements the Observer pattern over the `on_tool_call` and `on_submit` events.
    - Operates on a structured `ToolResult` interface (`{ content, metadata, isError }`) to robustly pass execution metadata (like process exit codes) through the pipeline without brittle string parsing.
    - Can _intercept_ or _modify_ a tool request before it hits the tools.
    - Can _inject_ `<system-reminder>` messages back to the Execution Engine.
 
-5. **Tool Router & Hybrid Execution**:
+6. **Tool Router & Hybrid Execution**:
    - **Host tools** (`write_file`, `read_file`): Execute directly on the host via Node.js `fs`. Changes appear instantly in the user's IDE.
    - **Sandbox tools** (`bash`, `run_tests`, `install_deps`): Route through the File Sync layer → E2B sandbox.
    - The split is determined by tool type, not configuration.
 
-6. **File Sync Layer** (`src/sandbox/sync.ts`):
+7. **File Sync Layer** (`src/sandbox/sync.ts`):
    - Tracks which files have changed on the host since the last sandbox sync.
    - Before each sandbox execution, uploads only the changed files to the sandbox's `/workspace/` directory.
    - Strategies: **upload-on-execute** (default) or **watch & mirror** (future).
 
-7. **E2B Sandbox** (`src/sandbox/`):
+8. **E2B Sandbox** (`src/sandbox/`):
    - Each agent session initializes an E2B cloud sandbox via the `e2b` TypeScript SDK.
    - All bash commands and code execution run via `sandbox.commands.run()`.
    - The sandbox is destroyed on session end or timeout.

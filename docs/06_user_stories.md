@@ -70,3 +70,9 @@ This document contains the foundational user stories for the Joone agent, organi
 - **US 11.2**: As the core engine, I want an absolute Emergency Truncation trap door at 95% capacity to prevent immediate process death when compaction isn't fast enough.
 - **US 11.3**: As a user working on a long-running complex task, I want the `AutoSave` feature to quietly save my `.jsonl` session file atomically in the background every few turns.
 - **US 11.4**: As a user, when I hit `Ctrl+C` in my terminal, I want the CLI to intercept the shutdown signal, force a final instantaneous save, and clean up the sandbox before exiting.
+
+## Epic 12: Telemetry & Engine Bug Bash (M15)
+
+- **US 12.1**: As the core engine, I want to bind tools natively to my LLM runnable before invoking it, preventing raw XML text truncation and ensuring proper Tool orchestration.
+- **US 12.2**: As an operator tracking efficiency, I want the system to parse granular provider-specific metadata (like `cache_creation_input_tokens` and `cachedContentTokenCount`) to calculate an accurate Cache Hit Rate.
+- **US 12.3**: As a user with a powerful model (like Claude 3.5 Sonnet), I want the TUI context progress bar and engine compaction thresholds to be decoupled from my generation size limit (`maxTokens`) and accurately reflect my true 200k+ context window limit.

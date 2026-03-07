@@ -138,6 +138,19 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
 - **Context Window Overflows (Instant Death):**
   - _The Edge Case:_ Despite compaction thresholds, a single `read_file` returns 120k tokens string, instantly blowing past the 100% capacity mark. Compaction fails because the context is already overflowing.
   - _Mitigation:_ `ContextGuard` has a 95% "Emergency Truncation" threshold. Before hitting the API, if tokens > 95%, it _bypasses_ LLM compaction and brutally slices all but the last 4 messages, inserting a loud warning message directly into the stream, guaranteeing survival.
+
+## 12. Telemetry & Engine Edge Cases (M15)
+
+- **The "Lobotomized Model" Truncation (`bindTools` missing):**
+  - _The Edge Case:_ An LLM instance is created but `.bindTools(tools)` isn't explicitly chained onto it. The LLM attempts to emit XML-style raw tool payloads into standard text output, which causes downstream stream parsers or APIs to truncate unexpectedly.
+  - _Mitigation:_ The `ExecutionHarness` constructor conditionally checks for the `.bindTools` method on the incoming model and natively binds the tools to the active runnable before processing the first step.
+- **Provider Cache Metric Inconsistencies:**
+  - _The Edge Case:_ Trying to track Cache Hit Rates across models fails because Anthropic nests metadata as `cache_creation_input_tokens`, while Google uses `cachedContentTokenCount`. Standardizing into a generic `usage` payload results in a 0% tracker.
+  - _Mitigation:_ Implement a specialized `extractCacheMetrics()` utility to safely introspect the `response_metadata` of the `AIMessage` by checking the exact `provider` string before extracting metrics.
+- **Misaligned Context vs. Completion Thresholds:**
+  - _The Edge Case:_ A user sets `maxTokens: 4096` in their config to cap generation output. The `ContextGuard` historically reads this and tries to auto-compact the session once the overall context hits 3,200 (80%), causing an immediate loop of aggressive compactions even though the model supports 200k+ tokens.
+  - _Mitigation:_ Decouple TUI Context Monitors and `ContextGuard` boundaries from config generation limits. Implement a mapping function (`getProviderContextLimit()`) that dynamically returns the true capability of the model (1M for Gemini, 200k for Claude) as the guard boundary.
+
 - **Process Death Serialization Tearing:**
   - _The Edge Case:_ The `AutoSave` triggers at the exact millisecond the user presses `Ctrl+C`. The Node process terminates while `fs.writeFileSync` is mid-chunk, corrupting the JSONL session file irreversibly.
   - _Mitigation:_ Atomic saves. `SessionStore.saveSession()` writes to an intermediate staging stream. On `process.on('SIGINT')`, a synchronous `forceSave()` is fired to cleanly flush state _before_ `process.exit(0)`.
