@@ -110,6 +110,8 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 
 **Continue with Milestone 15:**
 
-1.  **M15: MCP Client Integration** — `@modelcontextprotocol/sdk`, stdio/HTTP transport, namespaced MCP tools.
+1.  **M15: Telemetry & Engine Bug Bash** — Fix `bindTools` truncation bug, provider-specific cache hit metrics, and context window limits.
+2.  **M16: TUI v2 & Event Architecture** — Refactor `ExecutionHarness` to an `EventEmitter`, and redesign TUI to a 2-column IDE layout with live logs and file tree.
+3.  **M17: MCP Client Integration** — `@modelcontextprotocol/sdk`, stdio/HTTP transport, namespaced MCP tools.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

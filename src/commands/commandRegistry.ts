@@ -38,8 +38,10 @@ export interface CommandContext {
   provider: string;
   /** Current model name. */
   model: string;
-  /** Max tokens (context window). */
+  /** Max tokens (generation limit). */
   maxTokens: number;
+  /** True context window token limit. */
+  contextTokens: number;
 }
 
 /**

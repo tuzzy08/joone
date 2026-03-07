@@ -33,6 +33,7 @@ export class SessionTracer {
     promptTokens: number;
     completionTokens: number;
     cached: boolean;
+    cachedTokens?: number; // Granular cache metrics
     duration: number;
     model?: string;
   }): void {
@@ -110,7 +111,9 @@ export class SessionTracer {
         case "llm_call":
           promptTokens += event.data.promptTokens || 0;
           completionTokens += event.data.completionTokens || 0;
-          if (event.data.cached) {
+          if (event.data.cachedTokens !== undefined) {
+            cachedPromptTokens += event.data.cachedTokens;
+          } else if (event.data.cached) {
             cachedPromptTokens += event.data.promptTokens || 0;
           }
           turnCount++;

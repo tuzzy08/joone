@@ -6,12 +6,12 @@ import { DynamicToolInterface } from "../tools/index.js";
 import { MiddlewarePipeline } from "../middleware/pipeline.js";
 import { ToolCallContext } from "../middleware/types.js";
 import { SessionTracer } from "../tracing/sessionTracer.js";
-import { countMessageTokens } from "./tokenCounter.js";
+import { countMessageTokens, extractCacheMetrics } from "./tokenCounter.js";
 import { SessionStore } from "./sessionStore.js";
 import { retryWithBackoff } from "./retry.js";
 import { wrapLLMError, JooneError, ToolExecutionError } from "./errors.js";
 import { SystemMessage } from "@langchain/core/messages";
-import { ContextGuard } from "./contextGuard.js";
+import { ContextGuard, getProviderContextLimit } from "./contextGuard.js";
 import { AutoSave } from "./autoSave.js";
 
 export interface StreamStepOptions {
@@ -55,7 +55,8 @@ export class ExecutionHarness {
         this.sessionId = sessionId ?? this.tracer.getSessionId();
         this.provider = provider;
         this.model = model;
-        this.contextGuard = new ContextGuard(this.llm, maxTokens, this.promptBuilder);
+        const contextLimit = getProviderContextLimit(this.provider, this.model);
+        this.contextGuard = new ContextGuard(this.llm, contextLimit, this.promptBuilder);
         this.autoSave = new AutoSave(this.sessionId, this.sessionStore);
     }
 
@@ -84,11 +85,13 @@ export class ExecutionHarness {
 
             const promptTokens = countMessageTokens(messages);
             const completionTokens = countMessageTokens([response as AIMessage]);
+            const cacheMetrics = extractCacheMetrics(response as AIMessage, this.provider);
 
             this.tracer.recordLLMCall({
                 promptTokens,
                 completionTokens,
-                cached: false,
+                cached: cacheMetrics.cachedTokens > 0,
+                cachedTokens: cacheMetrics.cachedTokens,
                 duration: Date.now() - start
             });
 
@@ -190,11 +193,13 @@ export class ExecutionHarness {
 
             const promptTokens = countMessageTokens(messages);
             const completionTokens = countMessageTokens([result]);
+            const cacheMetrics = extractCacheMetrics(result, this.provider);
 
             this.tracer.recordLLMCall({
                 promptTokens,
                 completionTokens,
-                cached: false,
+                cached: cacheMetrics.cachedTokens > 0,
+                cachedTokens: cacheMetrics.cachedTokens,
                 duration: Date.now() - start
             });
 

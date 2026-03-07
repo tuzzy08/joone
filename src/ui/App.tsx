@@ -10,6 +10,7 @@ import { HITLPrompt } from "./components/HITLPrompt.js";
 import { ExecutionHarness } from "../core/agentLoop.js";
 import { ContextState } from "../core/promptBuilder.js";
 import { countMessageTokens } from "../core/tokenCounter.js";
+import { getProviderContextLimit } from "../core/contextGuard.js";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import {
   HITLBridge,
@@ -49,6 +50,11 @@ export const App: React.FC<AppProps> = ({
   maxTokens,
 }) => {
   const { exit } = useApp();
+
+  const contextTokensLimit = useMemo(
+    () => getProviderContextLimit(provider, model),
+    [provider, model],
+  );
 
   // Slash Command Registry — initialized once, stable across renders
   const commandRegistry = useMemo(() => createDefaultRegistry(), []);
@@ -282,6 +288,7 @@ export const App: React.FC<AppProps> = ({
         provider,
         model,
         maxTokens,
+        contextTokens: contextTokensLimit,
       };
 
       try {
@@ -391,7 +398,7 @@ export const App: React.FC<AppProps> = ({
 
       <StatusBar
         contextTokens={contextTokens}
-        maxContextTokens={maxTokens}
+        maxContextTokens={contextTokensLimit}
         totalTokens={summary.totalTokens}
         cacheHitRate={summary.cacheHitRate}
         toolCalls={summary.toolCallCount}

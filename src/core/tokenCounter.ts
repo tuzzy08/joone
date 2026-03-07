@@ -1,4 +1,4 @@
-import { BaseMessage } from "@langchain/core/messages";
+import { BaseMessage, AIMessage } from "@langchain/core/messages";
 
 /**
  * Lightweight token counter using character-based heuristic.
@@ -61,4 +61,39 @@ export function isNearCapacity(
 ): boolean {
   const used = countMessageTokens(messages);
   return used >= maxTokens * threshold;
+}
+
+/**
+ * Extracts provider-specific cache hit metrics from an AI message.
+ */
+export function extractCacheMetrics(
+  aiMessage: AIMessage,
+  provider: string
+): { cachedTokens: number; createdTokens: number } {
+  const meta = aiMessage.response_metadata;
+  if (!meta) return { cachedTokens: 0, createdTokens: 0 };
+
+  const usage = (meta.usage || meta.tokenUsage || meta.estimatedTokenUsage || {}) as any;
+
+  // Anthropic uses these specific nested fields
+  if (provider === "anthropic") {
+    return {
+      cachedTokens: usage.cache_read_input_tokens || 0,
+      createdTokens: usage.cache_creation_input_tokens || 0,
+    };
+  }
+  
+  // Google Gemini uses cachedContentTokenCount
+  if (provider === "google-genai") {
+    return {
+      cachedTokens: usage.cachedContentTokenCount || 0,
+      createdTokens: usage.promptTokenCount - (usage.cachedContentTokenCount || 0) || 0,
+    };
+  }
+
+  // Fallback for others (assuming standard usage pattern if any support arises)
+  return {
+    cachedTokens: usage.prompt_tokens_details?.cached_tokens || usage.cached_tokens || 0,
+    createdTokens: 0,
+  };
 }

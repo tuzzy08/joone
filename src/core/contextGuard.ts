@@ -23,6 +23,34 @@ export interface ContextGuardMetrics {
   actionTaken: "none" | "compacted" | "emergency_truncated";
 }
 
+/**
+ * Maps providers and models to their actual maximum context windows,
+ * decoupling the context limit from the completion size maxTokens flag.
+ */
+export function getProviderContextLimit(provider: string, model: string): number {
+  const p = provider.toLowerCase();
+  const m = model.toLowerCase();
+  
+  if (p === "google-genai" || p === "google" || p === "google-vertexai") {
+    return 1_000_000;
+  }
+  if (p === "anthropic") {
+    return 200_000;
+  }
+  if (p === "openai") {
+    return 128_000;
+  }
+  if (p === "mistral") {
+    return 32_000;
+  }
+  if (p === "groq") {
+    if (m.includes("llama-3.1") || m.includes("llama3")) return 128_000;
+    return 32_000;
+  }
+  // Default fallback
+  return 100_000;
+}
+
 export class ContextGuard {
   private promptBuilder: CacheOptimizedPromptBuilder;
   private llm: Runnable | BaseChatModel;

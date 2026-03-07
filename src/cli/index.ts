@@ -488,7 +488,11 @@ IMPORTANT CAPABILITIES:
         };
       }
 
-      const harness = new ExecutionHarness(model, tools, pipeline, tracer, config.provider, config.model, sessionId);
+      const boundLlm = "bindTools" in model && typeof (model as any).bindTools === "function" 
+        ? (model as any).bindTools(tools) 
+        : model;
+        
+      const harness = new ExecutionHarness(boundLlm, tools, pipeline, tracer, config.provider, config.model, sessionId);
 
       const { render } = await import("ink");
       const React = await import("react");

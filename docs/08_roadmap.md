@@ -198,3 +198,29 @@ We will tackle this project moving from the foundation outward.
 3. **E2E Evaluations (Evals)**:
    - Hook LangSmith datasets up to the `ExecutionHarness` to run regression tests against known code tasks.
    - Measure **Cache Hit Rate** assertions (e.g., Assert CacheHit > 90% over a 10-turn conversation).
+
+---
+
+## Milestone 15: Telemetry & Engine Bug Bash
+
+**Goal:** Fix the production execution bugs restricting the agent's performance and accuracy.
+
+1. **The Truncation/Tool Bug**: Refactor `modelFactory` and `index.ts` to ensure the core LLM instance actively binds to tools (`bindTools`) before the agent loop begins, stopping it from hallucinating raw XML `<tool_call>` blocks.
+2. **The Cache Hit Bug**: Write provider-specific parsers to properly extract `cache_creation_input_tokens` and `cache_read_input_tokens` from Anthropic and Gemini payloads so the TUI reflects real usage.
+3. **The Context Window Bug**: Decouple the TUI's token limit UI from the completion `maxTokens` configuration so it accurately reflects the 1M+ token limits of models like Gemini and Claude.
+
+## Milestone 16: TUI v2 & Event Architecture
+
+**Goal:** Upgrade the TUI into a transparent, deeply integrated IDE layout.
+
+1. **The Event System**: Refactor `ExecutionHarness` to implement an `EventEmitter` interface. Stream typed `AgentEvent` objects (`tool:start`, `subagent:spawn`) to the UI instead of rendering entirely post-turn.
+2. **2-Column Layout Redesign**: Rewrite `App.tsx` (using `ink`) from a simple chat scroll to a 2-column format.
+3. **Live UI Workspaces**: Add a live File Browser tree to the right column, a real-time Agent Actions event log, and pinned Metrics panels for instantaneous token monitoring.
+
+## Milestone 17: MCP Client Integration
+
+**Goal:** Connect Joone directly to standard Model Context Protocol servers.
+
+1. **Install `@modelcontextprotocol/sdk`**.
+2. **Configuration Support**: Support configuring multiple MCP servers with execution commands or URLs in `config.json`.
+3. **Dynamic MCP Tool Proxying**: Implement a bridge between the MCP standard and Langchain's `StructuredTool` interface so the agent can naturally route requests directly into the MCP connection layer.

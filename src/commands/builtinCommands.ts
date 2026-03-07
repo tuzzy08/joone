@@ -89,7 +89,7 @@ export const CompactCommand: SlashCommand = {
       ...history, // Simplified — the full prompt builder would add system messages too
     ];
     const currentTokens = countMessageTokens(allMessages);
-    const pct = Math.round((currentTokens / ctx.maxTokens) * 100);
+    const pct = Math.round((currentTokens / ctx.contextTokens) * 100);
 
     if (pct < 50) {
       return `Context at ${pct}% capacity (${currentTokens} tokens). ` +
@@ -115,7 +115,7 @@ export const CompactCommand: SlashCommand = {
 
     const newTokens = countMessageTokens([summaryMsg, ...recent]);
     return `✓ Compacted ${evictedCount} messages. ` +
-      `Tokens: ${currentTokens} → ${newTokens} (${Math.round((newTokens / ctx.maxTokens) * 100)}%)`;
+      `Tokens: ${currentTokens} → ${newTokens} (${Math.round((newTokens / ctx.contextTokens) * 100)}%)`;
   },
 };
 
@@ -135,7 +135,7 @@ export const TokensCommand: SlashCommand = {
       estimateTokens(ctx.contextState.sessionContext);
 
     const totalTokens = systemTokens + historyTokens;
-    const pct = Math.round((totalTokens / ctx.maxTokens) * 100);
+    const pct = Math.round((totalTokens / ctx.contextTokens) * 100);
 
     const bar = generateBar(pct);
 
@@ -143,7 +143,7 @@ export const TokensCommand: SlashCommand = {
       `Token Usage:`,
       `  System prompt:  ~${systemTokens} tokens`,
       `  Conversation:   ~${historyTokens} tokens (${history.length} messages)`,
-      `  Total:          ~${totalTokens} / ${ctx.maxTokens} tokens`,
+      `  Total:          ~${totalTokens} / ${ctx.contextTokens} tokens`,
       `  Capacity:       ${bar} ${pct}%`,
       pct >= 80 ? `  ⚠ Near capacity — consider /compact` : "",
     ].filter(Boolean).join("\n");
@@ -168,14 +168,14 @@ export const StatusCommand: SlashCommand = {
   execute: async (_args, ctx) => {
     const history = ctx.contextState.conversationHistory;
     const tokens = countMessageTokens(history);
-    const pct = Math.round((tokens / ctx.maxTokens) * 100);
+    const pct = Math.round((tokens / ctx.contextTokens) * 100);
 
     return [
       `Session Status:`,
       `  Provider:     ${ctx.provider}`,
       `  Model:        ${ctx.model}`,
       `  Messages:     ${history.length}`,
-      `  Token Usage:  ~${tokens} / ${ctx.maxTokens} (${pct}%)`,
+      `  Token Usage:  ~${tokens} / ${ctx.contextTokens} (${pct}%)`,
       `  CWD:          ${process.cwd()}`,
     ].join("\n");
   },
