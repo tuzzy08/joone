@@ -209,13 +209,14 @@ We will tackle this project moving from the foundation outward.
 2. **The Cache Hit Bug**: Write provider-specific parsers to properly extract `cache_creation_input_tokens` and `cache_read_input_tokens` from Anthropic and Gemini payloads so the TUI reflects real usage.
 3. **The Context Window Bug**: Decouple the TUI's token limit UI from the completion `maxTokens` configuration so it accurately reflects the 1M+ token limits of models like Gemini and Claude.
 
-## Milestone 16: TUI v2 & Event Architecture
+## Milestone 16: TUI v2, Event Tracking & Host Dependency Mgmt
 
-**Goal:** Upgrade the TUI into a transparent, deeply integrated IDE layout.
+**Goal:** Upgrade the TUI into a transparent, deeply integrated IDE layout and capture real-time actions.
 
-1. **The Event System**: Refactor `ExecutionHarness` to implement an `EventEmitter` interface. Stream typed `AgentEvent` objects (`tool:start`, `subagent:spawn`) to the UI instead of rendering entirely post-turn.
-2. **2-Column Layout Redesign**: Rewrite `App.tsx` (using `ink`) from a simple chat scroll to a 2-column format.
-3. **Live UI Workspaces**: Add a live File Browser tree to the right column, a real-time Agent Actions event log, and pinned Metrics panels for instantaneous token monitoring.
+1. **The Event System**: Refactor `ExecutionHarness` to implement an `EventEmitter` interface. Broadcast fine-grained `AgentEvent` objects to capture all real-time actions including File I/O (`read_file`/`write_file`), Script Execution (host & sandbox), Sub-agent spawning, and Web Browsing/Navigation.
+2. **Host Dependency Management**: Create a new `install_host_dependencies` tool gated by HITL permission. This allows the agent to natively bootstrap and build applications purely on the host OS for the user (running `npm install`, etc.).
+3. **2-Column Layout Redesign**: Rewrite `App.tsx` (using `ink`) from a simple chat scroll to a 2-column format.
+4. **Live UI Workspaces**: Add a live File Browser tree to the right column, a real-time Agent Actions event log (powered by the event bus), and pinned Metrics panels for instantaneous token monitoring.
 
 ## Milestone 17: MCP Client Integration
 

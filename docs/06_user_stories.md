@@ -76,3 +76,10 @@ This document contains the foundational user stories for the Joone agent, organi
 - **US 12.1**: As the core engine, I want to bind tools natively to my LLM runnable before invoking it, preventing raw XML text truncation and ensuring proper Tool orchestration.
 - **US 12.2**: As an operator tracking efficiency, I want the system to parse granular provider-specific metadata (like `cache_creation_input_tokens` and `cachedContentTokenCount`) to calculate an accurate Cache Hit Rate.
 - **US 12.3**: As a user with a powerful model (like Claude 3.5 Sonnet), I want the TUI context progress bar and engine compaction thresholds to be decoupled from my generation size limit (`maxTokens`) and accurately reflect my true 200k+ context window limit.
+
+## Epic 13: TUI v2, Event Tracking & Host Dependency Mgmt (M16)
+
+- **US 13.1**: As a user monitoring long-running autonomous tasks, I want to see a real-time event log in my TUI that explicitly broadcasts file system I/O, script executions, subagent spawns, and web browsing actions so I am never blind to the agent's behavior.
+- **US 13.2**: As an agent tasked with scaffolding locally, I want access to an `install_host_dependencies` tool so I can natively bootstrap and install packages (via `npm`/`pip`/etc.) directly onto the user's host OS, rather than isolating everything in the sandbox.
+- **US 13.3**: As a security-conscious user, I want the new host dependency tool to be strictly gated by Human-in-the-Loop (HITL) permission prompts by default, so no malicious code executes natively without my approval.
+- **US 13.4**: As a user reading dense code traces, I want the TUI converted from a scrolling vertical chat log into a structured 2-column IDE layout so I can pin metrics, active processes, and a live File Tree in a dedicated sidebar.
