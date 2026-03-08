@@ -225,3 +225,28 @@ We will tackle this project moving from the foundation outward.
 1. **Install `@modelcontextprotocol/sdk`**.
 2. **Configuration Support**: Support configuring multiple MCP servers with execution commands or URLs in `config.json`.
 3. **Dynamic MCP Tool Proxying**: Implement a bridge between the MCP standard and Langchain's `StructuredTool` interface so the agent can naturally route requests directly into the MCP connection layer.
+
+## Milestone 18: TUI Stability & UX Polish
+
+**Goal:** Resolve severe Terminal UI bugs (freezing, disappearing messages), improve the conversational UX, and fix timeout issues.
+
+1. **Fixed Input & Scrollable Chat**: Refactor `App.tsx` using `ink`'s `<Static>` component or a strict flex-box layout. Research LangChain/Deep Agent native front-end streaming hooks to replace complex manual states.
+2. **Infinite HITL Wait & State Management**: Remove timeouts on HITL waiting. Utilize LangGraph/Deep Agent's native "allowed decisions list" and interrupt nodes for rigorous and explicit human branching.
+3. **Message Differentiation**: Overhaul `MessageBubble.tsx` with thin persona-colored gradient borders, explicit tags, and tailored padding.
+4. **Persistent Event Nodes**: Emit critical agent events directly into the main conversation array as stylized `<Static>` nodes, while strictly ensuring they are filtered out of the API context payload to prevent token bloat.
+
+## Milestone 19: Core Engine Alignment & Host-First Execution
+
+**Goal:** Remove Sandbox-by-default initialization, inject rich workspace context, and refactor the core loop to standard LangChain primitives.
+
+1. **Host-First Architecture & Native Sandboxing**: Disable automatic E2B startup. Set `executionMode: "host" | "sandbox"`. Route `bash` via the Host protected by strict command whitelisting. Use Deep Agent Sandbox Primitives to orchestrate fallback containers natively rather than bespoke wrappers.
+2. **Context Injection**: Update the `<system-reminder>` to actively scan and inject `process.cwd()` and a directory tree on start/resume.
+3. **LangChain Primitives Refactor**: Deprecate the bespoke `while(true)` custom tool-calling loop. Refactor completely to use LangGraph's native state graphs, interrupts, memory savers, and agent executables (Deep Agents) to guarantee predictable routing.
+
+## Milestone 20: Tauri Cross-Platform Desktop Client
+
+**Goal:** Migrate the agent into a modern, native GUI application using Tauri.
+
+1. **Architecture Scaffold**: Initialize a Tauri workspace and structure the Rust/TS bridge.
+2. **GUI Development**: Build a highly polished two-pane IDE interface using standard web technologies (React/Tailwind) rendering rich markdown and interactive tool-call accordions.
+3. **System Integration**: Leverage Tauri native APIs for fast filesystem access and package binaries (`.msi`, `.dmg`, `.AppImage`) via GitHub Actions.
