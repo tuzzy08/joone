@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Box, Text, useInput, useApp } from "ink";
+import { Box, Text, useInput, useApp, Static } from "ink";
 import TextInput from "ink-text-input";
 import { Header } from "./components/Header.js";
 import { StatusBar } from "./components/StatusBar.js";
@@ -21,6 +21,7 @@ import {
 } from "../hitl/bridge.js";
 import { createDefaultRegistry } from "../commands/builtinCommands.js";
 import { CommandRegistry } from "../commands/commandRegistry.js";
+import { AgentEvent } from "../core/events.js";
 
 export interface Message {
   role: "user" | "agent" | "system";
@@ -109,6 +110,48 @@ export const App: React.FC<AppProps> = ({
       bridge.off("permission", onPermission);
     };
   }, []);
+
+  // Listen for agent events to inject as system messages
+  useEffect(() => {
+    const handleEvent = (event: AgentEvent) => {
+      // Ignore text streams so we don't spam the action log
+      if (event.type === "agent:stream") return;
+
+      let content = "";
+      switch (event.type) {
+        case "tool:start":
+          content = `[Tool] Starting ${event.toolName}`;
+          break;
+        case "tool:end":
+          content = `[Tool] ${event.toolName} completed in ${event.durationMs}ms`;
+          break;
+        case "subagent:spawn":
+          content = `[SubAgent] Spawning '${event.agentName}'`;
+          break;
+        case "file:io":
+          content = `[File] ${event.action.toUpperCase()}: ${event.path.split(/[\\\\/]/).pop()}`;
+          break;
+        case "system:script_exec":
+          content = `[Exec] ${event.location}: ${event.command.slice(0, 30)}...`;
+          break;
+        case "browser:nav":
+          content = `[Browser] Navigating to ${event.url}`;
+          break;
+        case "system:save":
+          content = `[System] Saved Session State`;
+          break;
+        default:
+          content = `[Unknown] Event type: ${(event as any).type}`;
+      }
+
+      setMessages((prev) => [...prev, { role: "system", content }]);
+    };
+
+    harness.on("agent:event", handleEvent);
+    return () => {
+      harness.off("agent:event", handleEvent);
+    };
+  }, [harness]);
 
   // StatusBar Metrics
   const [startTime] = useState(Date.now());
@@ -350,9 +393,11 @@ export const App: React.FC<AppProps> = ({
         {/* LEFT COLUMN: Chat & Interactive Area */}
         <Box flexDirection="column" width="65%" paddingRight={1}>
           <Box flexDirection="column" paddingY={1}>
-            {messages.map((msg, i) => (
-              <MessageBubble key={i} role={msg.role} content={msg.content} />
-            ))}
+            <Static items={messages}>
+              {(msg, i) => (
+                <MessageBubble key={i} role={msg.role} content={msg.content} />
+              )}
+            </Static>
           </Box>
 
           {isStreaming && (
@@ -398,11 +443,15 @@ export const App: React.FC<AppProps> = ({
             </Box>
           )}
 
-          {isProcessing && !isStreaming && !activeToolCall && (
-            <Box paddingX={1} marginBottom={1}>
-              <Text dimColor>Thinking...</Text>
-            </Box>
-          )}
+          {isProcessing &&
+            !isStreaming &&
+            !activeToolCall &&
+            !hitlQuestion &&
+            !hitlPermission && (
+              <Box paddingX={1} marginBottom={1}>
+                <Text dimColor>Thinking...</Text>
+              </Box>
+            )}
         </Box>
 
         {/* RIGHT COLUMN: Dashboards */}
@@ -419,9 +468,6 @@ export const App: React.FC<AppProps> = ({
           />
           <Box marginTop={1}>
             <FileBrowser />
-          </Box>
-          <Box marginTop={1}>
-            <ActionLog emitter={harness} />
           </Box>
         </Box>
       </Box>

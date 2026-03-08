@@ -8,3 +8,4 @@ coverage/
 *.log
 *.txt
 vitest_output.txt
+deep_agents_docs/

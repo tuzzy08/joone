@@ -70,26 +70,11 @@ export class HITLBridge extends EventEmitter {
             createdAt: Date.now(),
         };
 
-        return new Promise<string>((resolve, reject) => {
+        return new Promise<string>((resolve) => {
             this.pendingResolvers.set(id, resolve);
 
             // Emit the question so the TUI can render it
             this.emit("question", payload);
-
-            // Timeout: auto-reject if user doesn't respond
-            const timer = setTimeout(() => {
-                if (this.pendingResolvers.has(id)) {
-                    this.pendingResolvers.delete(id);
-                    resolve("[No response — the user did not answer within the timeout period.]");
-                }
-            }, this.timeoutMs);
-
-            // Clean up timer if resolved before timeout
-            const originalResolve = this.pendingResolvers.get(id)!;
-            this.pendingResolvers.set(id, (answer: string) => {
-                clearTimeout(timer);
-                originalResolve(answer);
-            });
         });
     }
 
@@ -119,21 +104,6 @@ export class HITLBridge extends EventEmitter {
 
             // Emit so the TUI can render the permission prompt
             this.emit("permission", payload);
-
-            // Timeout: auto-deny
-            const timer = setTimeout(() => {
-                if (this.pendingResolvers.has(id)) {
-                    this.pendingResolvers.delete(id);
-                    resolve(false); // Denied by timeout
-                }
-            }, this.timeoutMs);
-
-            // Clean up timer on resolve
-            const current = this.pendingResolvers.get(id)!;
-            this.pendingResolvers.set(id, (answer: string) => {
-                clearTimeout(timer);
-                (current as any)(answer);
-            });
         });
     }
 

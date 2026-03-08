@@ -32,11 +32,25 @@ interface MessageBubbleProps {
   const label = isUser ? "you" : "joone";
 
   return (
-    <Box flexDirection="column" paddingX={1}>
-      <Text bold color={accentColor}>
-        {label}
-      </Text>
-      <Box marginLeft={2}>
+    <Box
+      flexDirection="column"
+      paddingX={1}
+      paddingY={1}
+      marginBottom={1}
+      borderStyle="round"
+      borderColor={accentColor}
+    >
+      <Box marginBottom={1}>
+        <Text
+          bold
+          color={accentColor}
+          backgroundColor={isUser ? undefined : "green"}
+        >
+          {isUser ? "👤 " : "🤖 "}
+          {label.toUpperCase()}
+        </Text>
+      </Box>
+      <Box marginLeft={1}>
         <Text color="white" wrap="wrap">
           {content}
         </Text>

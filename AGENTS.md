@@ -11,6 +11,30 @@ Before tackling complex tasks related to the context engine, middleware, or tool
 - `docs/02_edge_cases_and_mitigations.md`: What _not_ to do (e.g., Leaky timestamps, Mid-session model switches).
 - `docs/07_system_architecture.md`: The REPL execution graph.
 
+### Deep Agents SDK (MUST CONSULT)
+
+> **CRITICAL REMINDER:** We are migrating to LangChain's Deep Agents primitives. You **MUST** consult the local documentation thoroughly before and during implementation to avoid reinventing the wheel with manual loops/schemas.
+
+Please search and refer to the provided documentation inside the `deep_agents_docs/` folder:
+
+- **Getting Started & Architecture:**
+  - `deep_agents_docs/overview.md`
+  - `deep_agents_docs/quickstart.md`
+  - `deep_agents_docs/comparison.md`
+  - `deep_agents_docs/customization.md`
+- **Core Capabilities (State & Primitives):**
+  - `deep_agents_docs/core_capabilities/overview.md`
+  - `deep_agents_docs/core_capabilities/backends.md`
+  - `deep_agents_docs/core_capabilities/hitl.md`
+  - `deep_agents_docs/core_capabilities/long_term_memory.md`
+  - `deep_agents_docs/core_capabilities/models.md`
+  - `deep_agents_docs/core_capabilities/sandboxes.md`
+  - `deep_agents_docs/core_capabilities/skills.md`
+  - `deep_agents_docs/core_capabilities/sub_agents.md`
+- **Streaming & UI:**
+  - `deep_agents_docs/streaming/overview.md`
+  - `deep_agents_docs/streaming/frontend.md`
+
 ## Development Process: Red-Green-Refactor TDD
 
 > **CRITICAL:** This project follows a strict **Test-Driven Development (TDD)** workflow using the **Red-Green-Refactor** cycle.

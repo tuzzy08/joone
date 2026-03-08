@@ -2,7 +2,9 @@
   "name": "joonecli",
   "version": "0.2.0",
   "description": "An autonomous coding agent",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "dist/cli/index.js",
   "bin": {
     "joone": "dist/cli/index.js"
@@ -45,6 +47,7 @@
     "cross-spawn": "^7.0.6",
     "dotenv": "^17.3.1",
     "e2b": "^2.13.0",
+    "express": "^5.2.1",
     "ink": "^6.8.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",

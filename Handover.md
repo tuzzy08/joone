@@ -95,6 +95,7 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 - ✅ **M14: Stability & Reliability:** `ContextGuard` (80% auto-compact, 95% emergency truncation), `AutoSave` (debounced JSONL persistence), and atomic TUI `SIGINT/SIGTERM` handling.
 - ✅ **M15: Telemetry & Engine Bug Bash:** Bound tools natively to models preventing XML truncation, extracted precise `cache_creation_input_tokens`, and decoupled UI components from `maxTokens` generation limits.
 - ✅ **M16: TUI v2, Event Tracking & Host Dependency Mgmt:** Built `AgentEventEmitter`, a 2-Column IDE layout (`App.tsx`), `FileBrowser`, `ActionLog`, and a strictly whitelisted `install_host_dependencies` capability bypassing E2B.
+- ✅ **M18: TUI Stability & UX Polish:** Ink Scrollable `<Static>`, dynamic aesthetic `MessageBubble`, unified `Static` streaming of embedded Action Logs, and robust infinite `HITLBridge` interrupts.
 
 ### Tool Routing Summary
 

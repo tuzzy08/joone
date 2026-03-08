@@ -226,7 +226,7 @@ We will tackle this project moving from the foundation outward.
 2. **Configuration Support**: Support configuring multiple MCP servers with execution commands or URLs in `config.json`.
 3. **Dynamic MCP Tool Proxying**: Implement a bridge between the MCP standard and Langchain's `StructuredTool` interface so the agent can naturally route requests directly into the MCP connection layer.
 
-## Milestone 18: TUI Stability & UX Polish
+## Milestone 18: TUI Stability & UX Polish ✅
 
 **Goal:** Resolve severe Terminal UI bugs (freezing, disappearing messages), improve the conversational UX, and fix timeout issues.
 
