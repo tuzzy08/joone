@@ -6,11 +6,11 @@ The system operates as a CLI-based REPL (Read-Eval-Print Loop) Agent Wrapper. Th
 
 ### Hybrid Sandbox Model
 
-Joone uses a **Hybrid** architecture for safety and developer experience:
+Joone inherently favors a **Host-First Architecture** combined with deep agent orchestrations:
 
-- **File operations** (`write_file`, `read_file`) run on the **host machine**, so the user sees changes in real-time in their IDE.
-- **Code execution** (`bash`, `npm test`, scripts) runs inside an **E2B sandboxed microVM**, protecting the host from destructive commands.
-- A **File Sync** layer mirrors changed files from host → sandbox before each execution.
+- **File operations** (`write_file`, `read_file`) and native builds (`install_host_dependencies`, `bash`) default to running on the **host machine**, guarded by strict Whitelisting and CommandSanitizer middlewares.
+- **Deep Agent Sandboxing** (`e2b`) is available explicitly via `executionMode: "sandbox"` for dangerous or unknown environments, orchestrated through generic LangChain sandbox primitives.
+- A **File Sync** layer mirrors changed files from host → sandbox only when operating in strict sandbox mode.
 
 ```
 ┌─────────────────────────┐          ┌──────────────────────────┐
@@ -32,18 +32,18 @@ graph TD
     Config["Config Manager (~/.joone/config.json)"] -->|Provider + Key| Factory
     Factory[Model Factory] -->|BaseChatModel| MainLoop
 
-    subgraph Agent Execution Harness
-        MainLoop[Execution Engine]
-        State[Conversation State Manager]
+    subgraph Agent Execution Harness (LangGraph)
+        MainLoop[Deep Agent State Graph]
+        State[Conversation State / Memory Saver]
         PromptBuilder[Cache-Oriented Prompt Builder]
-        StreamHandler[Stream Handler]
+        StreamHandler[LangChain UI Streaming Hooks]
 
         State --> PromptBuilder
         MainLoop --> PromptBuilder
         PromptBuilder --> LLM((LLM API))
         LLM -->|Streamed Chunks| StreamHandler
-        StreamHandler -->|Complete Tool Call| Middlewares
-        StreamHandler -->|Text Tokens| Terminal[Terminal Output]
+        StreamHandler -->|Graph Interruptions (HITL)| Middlewares
+        StreamHandler -->|Text Tokens| Terminal[UI Event Render]
     end
 
     subgraph Middleware Pipeline
@@ -77,11 +77,11 @@ graph TD
 2. **State Manager & Prompt Builder** (`src/core/promptBuilder.ts`):
    - Maintains the "Prefix Match". Compiles the static system prompt, appends project variables once, and exclusively appends subsequent messages.
 
-3. **Execution Engine** (`src/core/agentLoop.ts`):
-   - Initializes by explicitly natively binding tools to the incoming generic model via `.bindTools(tools)` to prevent raw output truncation.
-   - Polls the LLM via `.stream()` (default) or `.invoke()`.
-   - The **Stream Handler** prints text tokens to stdout in real-time and buffers tool call JSON chunks until complete.
-   - Routes completed tool calls to the Middleware pipeline and extracts precise provider `CacheMetrics` for the tracer.
+3. **Execution Engine (LangGraph & Deep Agents)** (`src/core/agentLoop.ts`):
+   - Refactored from a bespoke while-loop into an official LangGraph `StateGraph` and Agent Executor.
+   - Utilizes Deep Agent primitives for tool binding and execution orchestration, routing transparently between tools, logic loops, and native interruptions.
+   - The **Stream Handler** leans on LangChain's native frontend streaming hooks to power live UI updates without manual buffering.
+   - Extracts precise provider `CacheMetrics` for the tracer.
 
 4. **ContextGuard** (`src/core/contextGuard.ts`):
    - Proactively checks token payload size _before_ querying the API.
