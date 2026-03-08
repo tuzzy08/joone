@@ -81,5 +81,5 @@ This document contains the foundational user stories for the Joone agent, organi
 
 - **US 13.1**: As a user monitoring long-running autonomous tasks, I want to see a real-time event log in my TUI that explicitly broadcasts file system I/O, script executions, subagent spawns, and web browsing actions so I am never blind to the agent's behavior.
 - **US 13.2**: As an agent tasked with scaffolding locally, I want access to an `install_host_dependencies` tool so I can natively bootstrap and install packages (via `npm`/`pip`/etc.) directly onto the user's host OS, rather than isolating everything in the sandbox.
-- **US 13.3**: As a security-conscious user, I want the new host dependency tool to be strictly gated by Human-in-the-Loop (HITL) permission prompts by default, so no malicious code executes natively without my approval.
+- **US 13.3**: As a security-conscious user, I want the new host dependency tool to be strictly gated by Human-in-the-Loop (HITL) permission prompts and heavily restricted by a strict package manager whitelist so no unknown binaries or malicious command chains execute without my approval.
 - **US 13.4**: As a user reading dense code traces, I want the TUI converted from a scrolling vertical chat log into a structured 2-column IDE layout so I can pin metrics, active processes, and a live File Tree in a dedicated sidebar.

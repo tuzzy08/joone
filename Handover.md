@@ -93,6 +93,8 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 - ✅ **M12: LLM-Powered Compaction:** LLM-driven `ConversationCompactor`, fast model mapping (`FAST_MODEL_DEFAULTS`), and seamless handoff prompts post-compaction.
 - ✅ **M13: Sub-Agent Orchestration:** `AgentRegistry`, isolated sync/async `SubAgentManager`, and safe `spawn_agent` + `check_agent` tools (Depth-1 limits).
 - ✅ **M14: Stability & Reliability:** `ContextGuard` (80% auto-compact, 95% emergency truncation), `AutoSave` (debounced JSONL persistence), and atomic TUI `SIGINT/SIGTERM` handling.
+- ✅ **M15: Telemetry & Engine Bug Bash:** Bound tools natively to models preventing XML truncation, extracted precise `cache_creation_input_tokens`, and decoupled UI components from `maxTokens` generation limits.
+- ✅ **M16: TUI v2, Event Tracking & Host Dependency Mgmt:** Built `AgentEventEmitter`, a 2-Column IDE layout (`App.tsx`), `FileBrowser`, `ActionLog`, and a strictly whitelisted `install_host_dependencies` capability bypassing E2B.
 
 ### Tool Routing Summary
 
@@ -105,12 +107,12 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 | `ask_user_question`               |                                     |
 | `/commands` (TUI-only, no LLM)    |                                     |
 | `spawn_agent`, `check_agent`      |                                     |
+| `install_host_dependencies`       |                                     |
 
 ### Pending Next Steps (Where to resume)
 
-**Continue with Milestone 16:**
+**Continue with Milestone 17:**
 
-1.  **M16: TUI v2 & Event Architecture** — Refactor `ExecutionHarness` to an `EventEmitter`, and redesign TUI to a 2-column IDE layout with live logs and file tree.
-2.  **M17: MCP Client Integration** — `@modelcontextprotocol/sdk`, stdio/HTTP transport, namespaced MCP tools.
+1.  **M17: MCP Client Integration** — `@modelcontextprotocol/sdk`, stdio/HTTP transport, namespaced MCP tools.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

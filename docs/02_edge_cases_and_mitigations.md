@@ -40,6 +40,9 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
 - **Host Filesystem Path Traversal (The "Escaped Workspace" Vulnerability):**
   - _The Edge Case:_ Because `read_file` and `write_file` execute on the host machine to support live IDE syncing, a malicious prompt could instruct the agent to write to `~/.bashrc`, `C:\Windows\System32`, or `/.ssh/id_rsa`, compromising the user's host machine.
   - _Mitigation:_ Implement strict Workspace Jail boundaries. Before any host I/O operation, the resolved path is evaluated against `process.cwd()`. If the path attempts to escape the root workspace, the tool immediately rejects the call returning a permissions error.
+- **Arbitrary Code Execution via Host Dependencies:**
+  - _The Edge Case:_ The `install_host_dependencies` runs direct commands on the user's machine (bypassing the sandbox) to globally scaffold projects. A malicious prompt could trick it into running `npm install express && rm -rf /` or executing unknown dangerous binaries.
+  - _Mitigation:_ The tool is strictly firewalled in two ways: (1) it defaults to asking for Human-in-the-Loop permission (via the `DANGEROUS_TOOLS` registry), and (2) it programmatically checks the target executable and subcommand against a hardcoded whitelist (e.g., `npm install`, `pip install`) while immediately failing if dangerous shell operators (`&`, `|`, `;`, `` ` ``, `$`) are detected.
 - **Silently Swallowed CLI Errors:**
   - _The Edge Case:_ A CLI tool (like OSV-Scanner) crashes due to a configuration error (exit code > 1) and prints an error to `stderr`. If the orchestration layer only checks for `stdout` and swallows non-zero exit codes silently falling back to another tool, the critical error trace is lost.
   - _Mitigation:_ Enforce strict exit code verification (e.g., `exitCode === 1` means vulnerabilities found) and emit clear warnings with the full `stderr` trace before attempting any fallback strategies.
