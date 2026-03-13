@@ -21,6 +21,21 @@ _This document serves as a living changelog and status board. Any human or agent
 
 ## Changelog
 
+### 2026-03-13: Post-M19 Bugfix - First-Turn Deep Agent Crash (COMPLETE)
+
+- **Regression Fix**: Fixed a production crash on the first user message where `ExecutionHarness` incorrectly treated Deep Agents `beforeAgent` input as a `{ state, handler }` request object, causing `state.globalSystemInstructions` to throw when `state` was undefined.
+- **Middleware Alignment**: Replaced the invalid `beforeAgent` system-prompt injection with a `wrapModelCall` middleware that reads `request.state` using the Deep Agents/LangChain hook contract and appends the dynamic `SystemMessage` safely.
+- **Guarding**: Added null-safe system prompt composition so missing state fields degrade to empty sections instead of crashing the session.
+- **Tests**: Added `tests/core/agentLoop.test.ts` to reproduce the first-turn failure and confirm the harness no longer crashes when the first prompt is submitted.
+
+### 2026-03-13: CLI Startup Cleanup and Deferred Runtime Initialization (COMPLETE)
+
+- **Import Cleanup**: Removed stale type-only imports from `src/cli/index.ts` that were left behind by the earlier lazy-loading refactor.
+- **True Lazy Loading**: Moved `modelFactory` and `providers` access behind dynamic import helpers so heavyweight LangChain/provider code is no longer loaded at CLI module startup.
+- **Interactive Startup Improvement**: Refactored `joone start` to render the Ink app before constructing the model, tools, and harness. Runtime initialization now happens on demand from the UI via `createHarness`, which makes the CLI appear sooner and shifts model/sandbox setup off the critical render path.
+- **Benchmark Mode**: Added `src/cli/startupBenchmark.ts` plus a new `joone start --benchmark-startup` mode that prints startup milestones and exits automatically for repeatable performance checks.
+- **Verification**: Added `tests/cli/indexImports.test.ts` and `tests/cli/startupBenchmark.test.ts`, kept the first-turn harness regression green, verified the project still compiles with `npm run build`, and captured one local sample showing ~1.3s to UI interactivity and ~2.7s to full harness readiness.
+
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 
 - **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.

@@ -40,18 +40,24 @@ interface AppProps {
   provider: string;
   model: string;
   streaming: boolean;
-  harness: ExecutionHarness;
+  createHarness: () => Promise<ExecutionHarness>;
   initialState: ContextState;
   maxTokens: number;
+  benchmarkStartup?: boolean;
+  onStartupBenchmarkMark?: (name: string) => void;
+  onStartupBenchmarkComplete?: () => void;
 }
 
 export const App: React.FC<AppProps> = ({
   provider,
   model,
   streaming,
-  harness,
+  createHarness,
   initialState,
   maxTokens,
+  benchmarkStartup = false,
+  onStartupBenchmarkMark,
+  onStartupBenchmarkComplete,
 }) => {
   const { exit } = useApp();
 
@@ -79,6 +85,9 @@ export const App: React.FC<AppProps> = ({
 
   // Core Engine State
   const [contextState, setContextState] = useState<ContextState>(initialState);
+  const [harness, setHarness] = useState<ExecutionHarness | null>(null);
+  const [isInitializingHarness, setIsInitializingHarness] = useState(false);
+  const harnessPromiseRef = React.useRef<Promise<ExecutionHarness> | null>(null);
 
   // HITL State
   const [hitlQuestion, setHitlQuestion] = useState<HITLQuestion | undefined>(
@@ -114,6 +123,10 @@ export const App: React.FC<AppProps> = ({
 
   // Listen for agent events to inject as system messages
   useEffect(() => {
+    if (!harness) {
+      return;
+    }
+
     const handleEvent = (event: AgentEvent) => {
       // Ignore text streams so we don't spam the action log
       if (event.type === "agent:stream") return;
@@ -181,10 +194,12 @@ export const App: React.FC<AppProps> = ({
 
   const performGracefulExit = async () => {
     try {
-      await harness.autoSave.forceSave({
-        config: { provider, model },
-        state: stateRef.current,
-      });
+      if (harness) {
+        await harness.autoSave.forceSave({
+          config: { provider, model },
+          state: stateRef.current,
+        });
+      }
     } catch (e) {
       // Ignore errors during exit
     } finally {
@@ -208,14 +223,77 @@ export const App: React.FC<AppProps> = ({
   }, [provider, model, harness, exit]);
 
   // Handle Ctrl+C (Keyboard)
-  useInput((input, key) => {
-    if (key.ctrl && input === "c") {
-      performGracefulExit();
+  useInput(
+    (input, key) => {
+      if (key.ctrl && input === "c") {
+        performGracefulExit();
+      }
+    },
+    { isActive: !benchmarkStartup },
+  );
+
+  const ensureHarness = async (): Promise<ExecutionHarness> => {
+    if (harness) {
+      return harness;
     }
-  });
+
+    if (!harnessPromiseRef.current) {
+      setIsInitializingHarness(true);
+      harnessPromiseRef.current = createHarness()
+        .then((createdHarness) => {
+          setHarness(createdHarness);
+          return createdHarness;
+        })
+        .finally(() => {
+          setIsInitializingHarness(false);
+        });
+    }
+
+    return harnessPromiseRef.current;
+  };
+
+  useEffect(() => {
+    if (!benchmarkStartup) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const runBenchmark = async () => {
+      try {
+        onStartupBenchmarkMark?.("ui:interactive");
+        await ensureHarness();
+
+        if (cancelled) {
+          return;
+        }
+
+        onStartupBenchmarkMark?.("runtime:harness-ready");
+        onStartupBenchmarkComplete?.();
+        requestSoftExit();
+      } catch (error: any) {
+        if (cancelled) {
+          return;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `Benchmark error: ${error.message}` },
+        ]);
+        requestSoftExit();
+      }
+    };
+
+    runBenchmark();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [benchmarkStartup]);
 
   const runAgentLoop = async (
     currentState: ContextState,
+    activeHarness: ExecutionHarness,
     resumeCommand?: Command,
   ) => {
     try {
@@ -225,7 +303,7 @@ export const App: React.FC<AppProps> = ({
         setStreamingTokens([]);
       }
 
-      const stream = harness.run(currentState, resumeCommand);
+      const stream = activeHarness.run(currentState, resumeCommand);
       let nextHistory = [...currentState.conversationHistory];
       let finalState: any = null;
 
@@ -267,8 +345,8 @@ export const App: React.FC<AppProps> = ({
 
       // ── Handle LangGraph Interrupts (HITL) ──
       // Check if the agent paused for permission
-      const stateObj = await (harness as any).agent.getState({
-        configurable: { thread_id: harness.sessionId },
+      const stateObj = await (activeHarness as any).agent.getState({
+        configurable: { thread_id: activeHarness.sessionId },
       });
 
       if (stateObj.next && stateObj.next.length > 0) {
@@ -294,7 +372,7 @@ export const App: React.FC<AppProps> = ({
           const command = new Command({ resume: resumePayload });
 
           // Recurse to resume the graph
-          await runAgentLoop(currentState, command);
+          await runAgentLoop(currentState, activeHarness, command);
           return;
         }
       }
@@ -327,6 +405,7 @@ export const App: React.FC<AppProps> = ({
     // Commands starting with "/" are handled locally at zero LLM cost.
     if (commandRegistry.isCommand(userText)) {
       setMessages((prev) => [...prev, { role: "user", content: userText }]);
+      const activeHarness = harness ?? (await ensureHarness());
 
       const commandContext = {
         config: {
@@ -337,7 +416,7 @@ export const App: React.FC<AppProps> = ({
           temperature: 0,
         } as any,
         configPath: "",
-        harness,
+        harness: activeHarness,
         contextState,
         setContextState,
         addSystemMessage: (content: string) => {
@@ -359,7 +438,7 @@ export const App: React.FC<AppProps> = ({
             { role: "system", content: "Goodbye! 👋" },
           ]);
           setTimeout(() => {
-            exit();
+            requestSoftExit();
             process.exit(0);
           }, 500);
           return;
@@ -392,10 +471,33 @@ export const App: React.FC<AppProps> = ({
     setContextState(updatedState);
 
     // 3. Start Turn
-    runAgentLoop(updatedState);
+    try {
+      const activeHarness = await ensureHarness();
+      await runAgentLoop(updatedState, activeHarness);
+    } catch (error: any) {
+      setIsProcessing(false);
+      setIsStreaming(false);
+      setActiveToolCall(null);
+      setMessages((prev) => [
+        ...prev,
+        { role: "system", content: `Error: ${error.message}` },
+      ]);
+    }
   };
 
-  const summary = harness.tracer.getSummary();
+  const requestSoftExit = () => {
+    exit();
+  };
+
+  const summary = harness
+    ? harness.tracer.getSummary()
+    : {
+        totalTokens: 0,
+        cacheHitRate: 0,
+        toolCallCount: 0,
+        turnCount: 0,
+        totalCost: 0,
+      };
   const contextTokens = countMessageTokens(contextState.conversationHistory);
 
   return (
@@ -440,7 +542,7 @@ export const App: React.FC<AppProps> = ({
             <HITLPrompt question={hitlQuestion} permission={hitlPermission} />
           )}
 
-          {!isProcessing && !hitlQuestion && !hitlPermission && (
+          {!benchmarkStartup && !isProcessing && !hitlQuestion && !hitlPermission && (
             <Box paddingX={1} marginBottom={1}>
               <Box marginRight={1}>
                 <Text color="green" bold>
@@ -462,7 +564,9 @@ export const App: React.FC<AppProps> = ({
             !hitlQuestion &&
             !hitlPermission && (
               <Box paddingX={1} marginBottom={1}>
-                <Text dimColor>Thinking...</Text>
+                <Text dimColor>
+                  {isInitializingHarness ? "Initializing agent..." : "Thinking..."}
+                </Text>
               </Box>
             )}
         </Box>

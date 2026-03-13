@@ -16,14 +16,8 @@ import {
   cancel,
 } from "@clack/prompts";
 import { loadConfig, saveConfig, JooneConfig } from "./config.js";
-import { createModel } from "./modelFactory.js";
-import { installProvider, uninstallProvider } from "./providers.js";
+import { StartupBenchmark } from "./startupBenchmark.js";
 import type { SandboxManager } from "../sandbox/manager.js";
-import type { ExecutionHarness } from "../core/agentLoop.js";
-import type { SessionStore } from "../core/sessionStore.js";
-import type { SessionResumer } from "../core/sessionResumer.js";
-import type { TraceAnalyzer } from "../tracing/analyzer.js";
-import type { SessionTracer } from "../tracing/sessionTracer.js";
 
 const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 
@@ -87,6 +81,16 @@ const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
 };
 
 const program = new Command();
+const startupBenchmark = new StartupBenchmark();
+startupBenchmark.mark("cli:entry");
+
+async function loadModelFactory() {
+  return import("./modelFactory.js");
+}
+
+async function loadProviderManager() {
+  return import("./providers.js");
+}
 
 program
   .name("joone")
@@ -219,6 +223,7 @@ async function runOnboarding(): Promise<JooneConfig> {
 
   const s = spinner();
   try {
+    const { installProvider } = await loadProviderManager();
     s.start(`Downloading and installing the ${provider} provider package...`);
     await installProvider(provider as string);
     s.stop(`Installed ${provider} provider package!`);
@@ -292,6 +297,7 @@ providerCmd
     const s = spinner();
     s.start(`Installing ${providerName}...`);
     try {
+      const { installProvider } = await loadProviderManager();
       await installProvider(providerName);
       s.stop(`Successfully installed ${providerName}`);
     } catch (e: any) {
@@ -308,6 +314,7 @@ providerCmd
     const s = spinner();
     s.start(`Uninstalling ${providerName}...`);
     try {
+      const { uninstallProvider } = await loadProviderManager();
       await uninstallProvider(providerName);
       s.stop(`Successfully uninstalled ${providerName}`);
     } catch (e: any) {
@@ -362,9 +369,11 @@ program
   .command("start", { isDefault: true })
   .description("Start a new Joone agent session")
   .option("--no-stream", "Disable streaming output")
+  .option("--benchmark-startup", "Print startup timing milestones and exit")
   .option("-r, --resume <sessionId>", "Resume a previous session by ID")
   .action(async (options) => {
     let config = loadConfig(CONFIG_PATH);
+    startupBenchmark.mark("cli:config-loaded");
 
     // Auto-trigger onboarding if no API key is configured
     if (!config.apiKey && config.provider !== "ollama") {
@@ -392,36 +401,10 @@ program
     );
 
     try {
-      const model = await createModel(config);
-      
-      const { SessionTracer } = await import("../tracing/sessionTracer.js");
-      const tracer = new SessionTracer();
-      let sandboxManager: SandboxManager | undefined;
-      const { bindSandbox, CORE_TOOLS } = await import("../tools/index.js");
-
-      if (config.executionMode !== "host") {
-        const { SandboxManager } = await import("../sandbox/manager.js");
-        const s = spinner();
-        s.start("Initializing Sandbox Environment...");
-        sandboxManager = new SandboxManager({ 
-          template: config.sandboxTemplate,
-          apiKey: config.e2bApiKey,
-          openSandboxApiKey: config.openSandboxApiKey,
-          openSandboxDomain: config.openSandboxDomain,
-        });
-        await sandboxManager.create();
-        
-        const { FileSync } = await import("../sandbox/sync.js");
-        const fileSync = new FileSync(process.cwd());
-        bindSandbox(sandboxManager, fileSync);
-
-        s.stop("Sandbox initialized");
-      }
-      const { askUserQuestionTool } = await import("../tools/askUser.js");
-      let tools = [...CORE_TOOLS, askUserQuestionTool] as import("@langchain/core/tools").StructuredTool[];
-      
       let initialState;
       let sessionId: string | undefined = undefined;
+      let cleanupRuntime = async () => {};
+      let pendingStartupBenchmarkReport: string | undefined;
 
       if (options.resume) {
         const s = spinner();
@@ -450,14 +433,62 @@ IMPORTANT CAPABILITIES:
 - You have access to an 'ask_user_question' tool. Use it to ask the user for clarification, preferences, or approval before making significant changes.
 - Some tool calls may require user approval before execution, depending on the user's permission settings. If a tool call is denied, try an alternative approach or ask the user for guidance.
 - You have access to Skills — reusable instruction sets for specialized tasks. Use 'search_skills' to discover them and 'load_skill' to activate their instructions.`,
-          projectMemory: `Initial working directory: ${process.cwd()}\n(No other project context loaded yet.)`,
+          projectMemory: `Initial working directory: ${process.cwd()}`,
           sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
           conversationHistory: []
         };
       }
 
-      const { ExecutionHarness } = await import("../core/agentLoop.js");
-      const harness = new ExecutionHarness(model, tools, tracer, config.provider, config.model, sessionId, config.maxTokens, config.permissionMode, config.executionMode);
+      const createHarness = async () => {
+        startupBenchmark.mark("runtime:harness-init-start");
+        const { createModel } = await loadModelFactory();
+        const model = await createModel(config);
+        startupBenchmark.mark("runtime:model-ready");
+
+        const { SessionTracer } = await import("../tracing/sessionTracer.js");
+        const tracer = new SessionTracer();
+        let sandboxManager: SandboxManager | undefined;
+        const { bindSandbox, CORE_TOOLS } = await import("../tools/index.js");
+
+        if (config.executionMode !== "host") {
+          const { SandboxManager } = await import("../sandbox/manager.js");
+          sandboxManager = new SandboxManager({ 
+            template: config.sandboxTemplate,
+            apiKey: config.e2bApiKey,
+            openSandboxApiKey: config.openSandboxApiKey,
+            openSandboxDomain: config.openSandboxDomain,
+          });
+          await sandboxManager.create();
+          
+          const { FileSync } = await import("../sandbox/sync.js");
+          const fileSync = new FileSync(process.cwd());
+          bindSandbox(sandboxManager, fileSync);
+        }
+
+        const { askUserQuestionTool } = await import("../tools/askUser.js");
+        const tools = [...CORE_TOOLS, askUserQuestionTool] as import("@langchain/core/tools").StructuredTool[];
+        const { ExecutionHarness } = await import("../core/agentLoop.js");
+        const harness = new ExecutionHarness(
+          model,
+          tools,
+          tracer,
+          config.provider,
+          config.model,
+          sessionId,
+          config.maxTokens,
+          config.permissionMode,
+          config.executionMode
+        );
+
+        cleanupRuntime = async () => {
+          tracer.save();
+          if (sandboxManager) {
+            await sandboxManager.destroy();
+          }
+        };
+
+        return harness;
+      };
 
       const { render } = await import("ink");
       const React = await import("react");
@@ -469,19 +500,25 @@ IMPORTANT CAPABILITIES:
           provider: config.provider, 
           model: config.model, 
           streaming: config.streaming, 
-          harness, 
+          createHarness,
           initialState,
           maxTokens: config.maxTokens,
+          benchmarkStartup: Boolean(options.benchmarkStartup),
+          onStartupBenchmarkMark: (name: string) => startupBenchmark.mark(name),
+          onStartupBenchmarkComplete: () => {
+            pendingStartupBenchmarkReport = startupBenchmark.format(
+              "Joone Startup Benchmark",
+            );
+          },
         })
       );
+      startupBenchmark.mark("ui:render-mounted");
       
       await waitUntilExit();
-      
-      // Cleanup
-      tracer.save();
-      if (sandboxManager) {
-        await sandboxManager.destroy();
+      if (pendingStartupBenchmarkReport) {
+        console.log(`\n${pendingStartupBenchmarkReport}\n`);
       }
+      await cleanupRuntime();
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error(chalk.red(`\n  ✗ ${error.stack}\n`));
@@ -600,6 +637,7 @@ program
       const datasetName = await ensureBaselineDataset();
       s.stop(`Dataset verified: ${chalk.white(datasetName)}`);
 
+      const { createModel } = await loadModelFactory();
       const model = await createModel(config);
       const { SessionTracer } = await import("../tracing/sessionTracer.js");
       const tracer = new SessionTracer();

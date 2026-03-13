@@ -24,6 +24,14 @@ export interface StreamStepOptions {
     onToken?: (token: string) => void;
 }
 
+function buildDynamicSystemPrompt(state?: Partial<ContextState>): string {
+    return [
+        state?.globalSystemInstructions ?? "",
+        `Project Memory:\n${state?.projectMemory ?? ""}`,
+        `Session Context:\n${state?.sessionContext ?? ""}`,
+    ].join("\n\n");
+}
+
 export class ExecutionHarness extends EventEmitter implements AgentEventEmitter {
     private agent: any;
     public tracer: SessionTracer;
@@ -69,14 +77,15 @@ export class ExecutionHarness extends EventEmitter implements AgentEventEmitter 
 
         const injectSystemMessage = createMiddleware({
             name: "InjectSystemMessage",
-            beforeAgent: async (request: any, handler: any) => {
-                const { state } = request;
-                const sysContent = `${state.globalSystemInstructions}\n\nProject Memory:\n${state.projectMemory}\n\nSession Context:\n${state.sessionContext}`;
+            wrapModelCall: async (request: any, handler: any) => {
+                const sysContent = buildDynamicSystemPrompt(request.state);
                 return handler({
                     ...request,
-                    systemMessage: new SystemMessage(sysContent),
+                    systemMessage: request.systemMessage.concat(
+                        new SystemMessage(sysContent)
+                    ),
                 });
-            }
+            },
         });
 
         const backend = executionMode === "sandbox" 

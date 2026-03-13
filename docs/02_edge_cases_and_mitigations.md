@@ -31,6 +31,12 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
 - **The "Ghost Tool Call" (Context Desync):**
   - _The Edge Case:_ A model emits a tool call but occasionally forgets to attach a internal `tool_call_id` (this breaks the strict `AIMessage[tool_calls] -> ToolMessage[tool_call_id]` sequencing rules required by modern LangChain/Anthropic/OpenAI APIs). If you forge a fake ID or cast it as a string, the LLM rejects the context on the next turn.
   - _Mitigation:_ The "Soft Fail" approach. Intercept the malformed tool call in the `ExecutionHarness`. Do not execute the tool and do not emit a `ToolMessage`. Instead, emit a corrective `HumanMessage` stating: _"You attempted to call tool X, but didn't provide a tool_call_id. Please try again."_ This prevents context poisoning.
+- **The "Hook Signature Drift" Crash (Deep Agents Middleware):**
+  - _The Edge Case:_ During SDK migrations, a custom middleware is written against the wrong hook contract, e.g. treating `beforeAgent` like `(request, handler)` instead of `(state, runtime)`. On the first user turn this can explode while reading custom state like `globalSystemInstructions`.
+  - _Mitigation:_ Match each hook to the documented Deep Agents/LangChain signature exactly. Use `beforeAgent` only for state patches, and use `wrapModelCall` when you need to modify `request.systemMessage` or inspect `request.state` before the model call. Add a first-turn regression test for any custom middleware that injects system context.
+- **The "Fake Lazy Load" Startup Stall:**
+  - _The Edge Case:_ A CLI entrypoint moves some imports to `import()` calls but still statically imports heavyweight modules like model factories or provider managers at top-level, or still awaits full runtime construction before first render. Users experience multi-second or multi-minute startup even though the code looks "lazy".
+  - _Mitigation:_ Keep the entry module lightweight, dynamically import heavyweight runtime modules only inside the command path that needs them, and defer expensive agent/model/sandbox construction until after the UI is mounted or the first task actually needs it. Protect the entrypoint with a regression test that forbids eager heavyweight imports.
 
 ## 3. Security & Execution Edge Cases (Tool Exploits)
 

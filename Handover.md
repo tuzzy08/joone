@@ -73,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** across 13 test suites. TypeScript compiles cleanly.
+All development follows strict TDD. Currently, **107 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
 
 ### Completed Milestones
 
@@ -97,6 +97,20 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 - ✅ **M16: TUI v2, Event Tracking & Host Dependency Mgmt:** Built `AgentEventEmitter`, a 2-Column IDE layout (`App.tsx`), `FileBrowser`, `ActionLog`, and a strictly whitelisted `install_host_dependencies` capability bypassing E2B.
 - ✅ **M18: TUI Stability & UX Polish:** Ink Scrollable `<Static>`, dynamic aesthetic `MessageBubble`, unified `Static` streaming of embedded Action Logs, and robust infinite `HITLBridge` interrupts.
 - ✅ **M19: Core Engine Alignment:** Migrated `ExecutionHarness` to natively use `createDeepAgent`, implemented `WhitelistedLocalShellBackend` for host-first architecture, injected dynamic contexts via middleware, and pruned legacy custom subagent/skill/routing logic.
+
+### Post-M19 Hotfix
+
+- Fixed a production crash on the first user message caused by misusing the Deep Agents `beforeAgent` hook signature in `ExecutionHarness`.
+- Dynamic system context injection now happens in `wrapModelCall`, which correctly receives `request.state` and appends a `SystemMessage` without dereferencing an undefined `state`.
+- Added a regression test in `tests/core/agentLoop.test.ts` to ensure the first turn no longer crashes when session context is injected.
+
+### CLI Startup Notes
+
+- `src/cli/index.ts` now lazily imports both `modelFactory` and `providers` helpers instead of pulling them into the entry module at process startup.
+- `joone start` no longer blocks initial Ink render on model creation, tool loading, or sandbox wiring. The UI receives a `createHarness` callback and initializes the runtime on demand, making startup visibly faster even when LangChain/provider imports are expensive.
+- The CLI import contract is protected by `tests/cli/indexImports.test.ts` so future refactors do not accidentally reintroduce eager heavyweight imports.
+- `joone start --benchmark-startup` is now available for repeatable startup profiling. It records milestone timings (CLI entry, config load, UI interactive, model ready, harness ready), prints a report, and exits automatically.
+- One local sample after the refactor measured roughly **1.3s to interactive UI** and **2.7s to harness ready**, with model creation remaining the dominant post-render cost.
 
 ### Tool Routing Summary
 
