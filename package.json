@@ -1,6 +1,6 @@
 {
   "name": "joonecli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "An autonomous coding agent",
   "files": [
     "dist"
