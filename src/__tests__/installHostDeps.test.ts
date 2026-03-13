@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { InstallHostDependenciesTool } from "../tools/installHostDeps.js";
+import { installHostDependenciesTool } from "../tools/installHostDeps.js";
 
 describe("InstallHostDependenciesTool (Security)", () => {
     it("allows permitted package manager commands", async () => {
@@ -12,42 +12,42 @@ describe("InstallHostDependenciesTool (Security)", () => {
     });
 
     it("blocks unknown binary", async () => {
-        const result = await InstallHostDependenciesTool.execute({
+        const result = await installHostDependenciesTool.invoke({
             command: "malicious_binary install foo",
         });
 
-        expect(result.isError).toBe(true);
-        expect(result.content).toMatch(/Security Error/i);
-        expect(result.content).toMatch(/is not allowed/);
+        expect(typeof result).toBe("string");
+        expect(result).toMatch(/Security Error/i);
+        expect(result).toMatch(/is not allowed/);
     });
 
     it("blocks disallowed subcommands for allowed binary", async () => {
-        const result = await InstallHostDependenciesTool.execute({
+        const result = await installHostDependenciesTool.invoke({
             command: "npm publish",
         });
 
-        expect(result.isError).toBe(true);
-        expect(result.content).toMatch(/Security Error/i);
-        expect(result.content).toMatch(/npm publish/);
+        expect(typeof result).toBe("string");
+        expect(result).toMatch(/Security Error/i);
+        expect(result).toMatch(/npm publish/);
     });
 
     it("blocks forbidden shell operators", async () => {
-        const result = await InstallHostDependenciesTool.execute({
+        const result = await installHostDependenciesTool.invoke({
             command: "npm install express && rm -rf /",
         });
 
-        expect(result.isError).toBe(true);
-        expect(result.content).toMatch(/Security Error/i);
-        expect(result.content).toMatch(/forbidden shell operators/);
+        expect(typeof result).toBe("string");
+        expect(result).toMatch(/Security Error/i);
+        expect(result).toMatch(/forbidden shell operators/);
     });
 
     it("blocks backticks", async () => {
-        const result = await InstallHostDependenciesTool.execute({
+        const result = await installHostDependenciesTool.invoke({
             command: "npm install `whoami`",
         });
 
-        expect(result.isError).toBe(true);
-        expect(result.content).toMatch(/Security Error/i);
-        expect(result.content).toMatch(/forbidden shell operators/);
+        expect(typeof result).toBe("string");
+        expect(result).toMatch(/Security Error/i);
+        expect(result).toMatch(/forbidden shell operators/);
     });
 });

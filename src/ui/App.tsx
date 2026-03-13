@@ -14,6 +14,7 @@ import { ContextState } from "../core/promptBuilder.js";
 import { countMessageTokens } from "../core/tokenCounter.js";
 import { getProviderContextLimit } from "../core/contextGuard.js";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
+import { Command } from "@langchain/langgraph";
 import {
   HITLBridge,
   HITLQuestion,
@@ -213,86 +214,98 @@ export const App: React.FC<AppProps> = ({
     }
   });
 
-  const runAgentLoop = async (currentState: ContextState) => {
+  const runAgentLoop = async (
+    currentState: ContextState,
+    resumeCommand?: Command,
+  ) => {
     try {
-      setIsStreaming(true);
-      setStreamingTokens([]);
-
-      let aiResponse: AIMessage;
-
-      if (streaming) {
-        aiResponse = await harness.streamStep(currentState, {
-          onToken: (token) => {
-            setStreamingTokens((prev) => [...prev, token]);
-          },
-        });
-      } else {
-        aiResponse = await harness.step(currentState);
+      if (!resumeCommand) {
+        setIsProcessing(true);
+        setIsStreaming(true);
+        setStreamingTokens([]);
       }
 
-      setIsStreaming(false);
+      const stream = harness.run(currentState, resumeCommand);
+      let nextHistory = [...currentState.conversationHistory];
+      let finalState: any = null;
 
-      // Add AI text to UI if any
-      if (
-        aiResponse.content &&
-        typeof aiResponse.content === "string" &&
-        aiResponse.content.trim() !== ""
-      ) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "agent", content: aiResponse.content as string },
-        ]);
-      }
-
-      // Add AI message to memory for following tools
-      let nextHistory = [...currentState.conversationHistory, aiResponse];
-
-      // Handle Tools
-      if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
-        // Execute all tool calls once
-        const toolMessages = await harness.executeToolCalls(
-          aiResponse,
-          currentState,
-        );
-
-        // Update UI sequentially for each tool call
-        for (const call of aiResponse.tool_calls) {
+      for await (const event of stream) {
+        if (
+          event.event === "on_chat_model_stream" &&
+          event.data?.chunk?.content
+        ) {
+          setStreamingTokens((prev) => [...prev, event.data.chunk.content]);
+        } else if (event.event === "on_chat_model_end") {
+          const content = event.data.output?.content;
+          if (content && typeof content === "string") {
+            setIsStreaming(false);
+            setMessages((prev) => [...prev, { role: "agent", content }]);
+          }
+        } else if (event.event === "on_tool_start") {
           setActiveToolCall({
-            name: call.name,
-            args: call.args,
+            name: event.name,
+            args: event.data.input,
             status: "running",
           });
-
-          // Brief delay to show running state
-          await new Promise((resolve) => setTimeout(resolve, 300));
-
+        } else if (event.event === "on_tool_end") {
+          // Note: we don't display the full tool output as result since it can be massive.
           setActiveToolCall({
-            name: call.name,
-            args: call.args,
+            name: event.name,
+            args: event.data.input,
             status: "success",
-            result:
-              toolMessages.length > 0
-                ? "Tool execution completed."
-                : "No output.",
+            result: "Tool execution completed.",
           });
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          setActiveToolCall(null);
+        } else if (
+          event.event === "on_chain_end" &&
+          event.name === "LangGraph"
+        ) {
+          finalState = event.data.output;
         }
-
-        // Add tool results to history once
-        nextHistory = [...nextHistory, ...toolMessages];
-
-        // Wait a sec so user sees the success state
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        setActiveToolCall(null);
-
-        // Recurse: Agent needs to react to the tool output
-        const nextState = { ...currentState, conversationHistory: nextHistory };
-        setContextState(nextState);
-        await runAgentLoop(nextState);
-      } else {
-        // Turn complete
-        setContextState({ ...currentState, conversationHistory: nextHistory });
-        setIsProcessing(false);
       }
+
+      // ── Handle LangGraph Interrupts (HITL) ──
+      // Check if the agent paused for permission
+      const stateObj = await (harness as any).agent.getState({
+        configurable: { thread_id: harness.sessionId },
+      });
+
+      if (stateObj.next && stateObj.next.length > 0) {
+        const tasks = stateObj.tasks || [];
+        const activeTask = tasks[0];
+
+        if (
+          activeTask &&
+          activeTask.interrupts &&
+          activeTask.interrupts.length > 0
+        ) {
+          const interruptPayload = activeTask.interrupts[0].value;
+          const toolName =
+            interruptPayload?.toolCall?.name || "restricted_tool";
+          const args = interruptPayload?.toolCall?.args || {};
+
+          const bridge = HITLBridge.getInstance();
+          const approved = await bridge.requestPermission(toolName, args);
+
+          const resumePayload = approved
+            ? { action: "approve" }
+            : { action: "reject" };
+          const command = new Command({ resume: resumePayload });
+
+          // Recurse to resume the graph
+          await runAgentLoop(currentState, command);
+          return;
+        }
+      }
+
+      // Turn complete
+      if (finalState && finalState.messages) {
+        nextHistory = finalState.messages;
+      }
+      setContextState({ ...currentState, conversationHistory: nextHistory });
+      setIsProcessing(false);
+      setIsStreaming(false);
     } catch (error: any) {
       setIsStreaming(false);
       setActiveToolCall(null);

@@ -15,26 +15,15 @@ import {
   isCancel,
   cancel,
 } from "@clack/prompts";
-import { loadConfig, saveConfig, JooneConfig, DEFAULT_CONFIG } from "./config.js";
+import { loadConfig, saveConfig, JooneConfig } from "./config.js";
 import { createModel } from "./modelFactory.js";
-import { installProvider, uninstallProvider, getProviderDir } from "./providers.js";
-import { tryEnableLangSmithFromConfig } from "../tracing/langsmith.js";
-import { TraceAnalyzer } from "../tracing/analyzer.js";
-import { SessionTracer } from "../tracing/sessionTracer.js";
-import { SandboxManager } from "../sandbox/manager.js";
-import { ToolRouter } from "../tools/router.js";
-import { MiddlewarePipeline } from "../middleware/pipeline.js";
-import { LoopDetectionMiddleware } from "../middleware/loopDetection.js";
-import { CommandSanitizerMiddleware } from "../middleware/commandSanitizer.js";
-import { PreCompletionMiddleware } from "../middleware/preCompletion.js";
-import { ExecutionHarness } from "../core/agentLoop.js";
-import { SessionStore } from "../core/sessionStore.js";
-import { SessionResumer } from "../core/sessionResumer.js";
-import { PermissionMiddleware } from "../middleware/permission.js";
-import { AskUserQuestionTool } from "../tools/askUser.js";
-import { createDefaultAgentRegistry } from "../agents/builtinAgents.js";
-import { SubAgentManager } from "../core/subAgent.js";
-import { createSpawnAgentTools } from "../tools/spawnAgent.js";
+import { installProvider, uninstallProvider } from "./providers.js";
+import type { SandboxManager } from "../sandbox/manager.js";
+import type { ExecutionHarness } from "../core/agentLoop.js";
+import type { SessionStore } from "../core/sessionStore.js";
+import type { SessionResumer } from "../core/sessionResumer.js";
+import type { TraceAnalyzer } from "../tracing/analyzer.js";
+import type { SessionTracer } from "../tracing/sessionTracer.js";
 
 const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 
@@ -390,6 +379,7 @@ program
       config.streaming = false;
     }
 
+    const { tryEnableLangSmithFromConfig } = await import("../tracing/langsmith.js");
     const tracingEnabled = tryEnableLangSmithFromConfig(config);
 
     console.log(
@@ -404,55 +394,31 @@ program
     try {
       const model = await createModel(config);
       
-      const pipeline = new MiddlewarePipeline();
-      pipeline.use(new LoopDetectionMiddleware(3));
-      pipeline.use(new CommandSanitizerMiddleware());
-      pipeline.use(new PermissionMiddleware(config.permissionMode ?? "auto"));
+      const { SessionTracer } = await import("../tracing/sessionTracer.js");
       const tracer = new SessionTracer();
-      
-      const { bindSandbox } = await import("../tools/index.js");
+      let sandboxManager: SandboxManager | undefined;
+      const { bindSandbox, CORE_TOOLS } = await import("../tools/index.js");
 
-      const s = spinner();
-      s.start("Initializing Sandbox Environment...");
-      const sandboxManager = new SandboxManager({ 
-        template: config.sandboxTemplate,
-        apiKey: config.e2bApiKey,
-        openSandboxApiKey: config.openSandboxApiKey,
-        openSandboxDomain: config.openSandboxDomain,
-      });
-      await sandboxManager.create();
-      
-      const { FileSync } = await import("../sandbox/sync.js");
-      const fileSync = new FileSync(process.cwd());
-      bindSandbox(sandboxManager, fileSync);
+      if (config.executionMode !== "host") {
+        const { SandboxManager } = await import("../sandbox/manager.js");
+        const s = spinner();
+        s.start("Initializing Sandbox Environment...");
+        sandboxManager = new SandboxManager({ 
+          template: config.sandboxTemplate,
+          apiKey: config.e2bApiKey,
+          openSandboxApiKey: config.openSandboxApiKey,
+          openSandboxDomain: config.openSandboxDomain,
+        });
+        await sandboxManager.create();
+        
+        const { FileSync } = await import("../sandbox/sync.js");
+        const fileSync = new FileSync(process.cwd());
+        bindSandbox(sandboxManager, fileSync);
 
-      // Sync user-level skills into the sandbox
-      const { SkillLoader } = await import("../skills/loader.js");
-      const skillLoader = new SkillLoader();
-      const skillPaths = skillLoader.getDiscoveryPaths();
-      await fileSync.syncSkillsToSandbox(sandboxManager, skillPaths);
-
-      s.stop("Sandbox initialized");
-      
-      // For the CLI, we start by loading the CORE tools
-      // Advanced tools (search, browser, etc.) will be dynamically loaded by the agent later
-      // via the SearchToolsTool when the registry is fully integrated
-      const { CORE_TOOLS } = await import("../tools/index.js");
-      let tools = [...CORE_TOOLS, AskUserQuestionTool] as import("../tools/index.js").DynamicToolInterface[];
-      
-      // Initialize Sub-Agent Orchestration
-      const agentRegistry = createDefaultAgentRegistry();
-      const subAgentModelName = config.subAgentModel ?? config.model;
-      
-      // Use the config to determine sub-agent model, with FAST_MODEL_DEFAULTS fallback
-      const { resolveFastModel } = await import("../core/compactor.js");
-      const resolvedSubModel = resolveFastModel(config.provider, config.model, config.subAgentModel);
-      
-      const subAgentLlm = await createModel({ ...config, model: resolvedSubModel });
-      const subAgentManager = new SubAgentManager(agentRegistry, tools, subAgentLlm);
-      const spawnAgentTools = createSpawnAgentTools(subAgentManager, agentRegistry);
-      
-      tools = [...tools, ...spawnAgentTools];
+        s.stop("Sandbox initialized");
+      }
+      const { askUserQuestionTool } = await import("../tools/askUser.js");
+      let tools = [...CORE_TOOLS, askUserQuestionTool] as import("@langchain/core/tools").StructuredTool[];
       
       let initialState;
       let sessionId: string | undefined = undefined;
@@ -460,9 +426,11 @@ program
       if (options.resume) {
         const s = spinner();
         s.start(`Loading session ${chalk.bold(options.resume)}...`);
+        const { SessionStore } = await import("../core/sessionStore.js");
         const store = new SessionStore();
         try {
           const payload = await store.loadSession(options.resume);
+          const { SessionResumer } = await import("../core/sessionResumer.js");
           const resumer = new SessionResumer(process.cwd());
           initialState = resumer.prepareForResume(payload);
           sessionId = options.resume;
@@ -475,24 +443,21 @@ program
       } else {
         initialState = {
           globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
-You run in a hybrid environment: you have read/write access to the host machine for code edits, but all code execution, testing, and dependency installation MUST happen in the isolated E2B sandbox for safety.
-Always use 'bash' to run terminal commands. Never read or write outside the current project directory unless explicitly requested.
+You run in a hybrid environment based on user configuration. You execute commands using 'bash' and can safely evaluate tests and install dependencies.
+Always use the tools provided to you. Never read or write outside the current project directory unless explicitly requested.
 
 IMPORTANT CAPABILITIES:
 - You have access to an 'ask_user_question' tool. Use it to ask the user for clarification, preferences, or approval before making significant changes.
 - Some tool calls may require user approval before execution, depending on the user's permission settings. If a tool call is denied, try an alternative approach or ask the user for guidance.
 - You have access to Skills — reusable instruction sets for specialized tasks. Use 'search_skills' to discover them and 'load_skill' to activate their instructions.`,
-          projectMemory: "No project context loaded yet.",
+          projectMemory: `Initial working directory: ${process.cwd()}\n(No other project context loaded yet.)`,
           sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
           conversationHistory: []
         };
       }
 
-      const boundLlm = "bindTools" in model && typeof (model as any).bindTools === "function" 
-        ? (model as any).bindTools(tools) 
-        : model;
-        
-      const harness = new ExecutionHarness(boundLlm, tools, pipeline, tracer, config.provider, config.model, sessionId);
+      const { ExecutionHarness } = await import("../core/agentLoop.js");
+      const harness = new ExecutionHarness(model, tools, tracer, config.provider, config.model, sessionId, config.maxTokens, config.permissionMode, config.executionMode);
 
       const { render } = await import("ink");
       const React = await import("react");
@@ -514,7 +479,9 @@ IMPORTANT CAPABILITIES:
       
       // Cleanup
       tracer.save();
-      await sandboxManager.destroy();
+      if (sandboxManager) {
+        await sandboxManager.destroy();
+      }
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error(chalk.red(`\n  ✗ ${error.stack}\n`));
@@ -531,6 +498,7 @@ program
   .command("sessions")
   .description("List all persistent sessions available for resumption")
   .action(async () => {
+    const { SessionStore } = await import("../core/sessionStore.js");
     const store = new SessionStore();
     const sessions = await store.listSessions();
 
@@ -558,7 +526,7 @@ program
 program
   .command("analyze [sessionId]")
   .description("Analyze a session trace for performance insights")
-  .action((sessionId) => {
+  .action(async (sessionId) => {
     let tracePath;
     const tracesDir = path.join(os.homedir(), ".joone", "traces");
 
@@ -588,6 +556,8 @@ program
     }
 
     try {
+      const { SessionTracer } = await import("../tracing/sessionTracer.js");
+      const { TraceAnalyzer } = await import("../tracing/analyzer.js");
       const trace = SessionTracer.load(tracePath);
       const analyzer = new TraceAnalyzer(trace);
       const report = analyzer.analyze();
@@ -611,6 +581,7 @@ program
       process.exit(1);
     }
 
+    const { tryEnableLangSmithFromConfig } = await import("../tracing/langsmith.js");
     tryEnableLangSmithFromConfig(config);
 
     console.log(chalk.cyan("\n  ◆ joone evals") + chalk.dim(` (Model: ${config.model})\n`));
@@ -630,32 +601,35 @@ program
       s.stop(`Dataset verified: ${chalk.white(datasetName)}`);
 
       const model = await createModel(config);
-      const pipeline = new MiddlewarePipeline();
-      pipeline.use(new LoopDetectionMiddleware(3));
-      pipeline.use(new CommandSanitizerMiddleware());
+      const { SessionTracer } = await import("../tracing/sessionTracer.js");
       const tracer = new SessionTracer();
       
       const { bindSandbox, CORE_TOOLS } = await import("../tools/index.js");
-      const tools = [...CORE_TOOLS] as import("../tools/index.js").DynamicToolInterface[];
+      const tools = [...CORE_TOOLS] as import("@langchain/core/tools").StructuredTool[];
 
       s.start("Running evaluations across dataset (this may take a few minutes)...");
       
       // We define a target function that the generic `evaluate` engine will call for each example
       const agentTargetFn = async (inputs: Record<string, any>) => {
+        const { ExecutionHarness } = await import("../core/agentLoop.js");
         const runTracer = new SessionTracer();
-        const harness = new ExecutionHarness(model, tools, pipeline, runTracer);
+        const harness = new ExecutionHarness(model, tools, runTracer, config.provider, config.model, undefined, config.maxTokens, config.permissionMode, config.executionMode);
 
-        // Initialize an empty sandbox just for this run
-        const sandboxManager = new SandboxManager({ 
-          template: config.sandboxTemplate,
-          apiKey: config.e2bApiKey,
-          openSandboxApiKey: config.openSandboxApiKey,
-          openSandboxDomain: config.openSandboxDomain,
-        });
-        await sandboxManager.create();
-        const { FileSync } = await import("../sandbox/sync.js");
-        const fileSync = new FileSync(process.cwd());
-        bindSandbox(sandboxManager, fileSync);
+        let sandboxManager: SandboxManager | undefined;
+        if (config.executionMode !== "host") {
+          const { SandboxManager } = await import("../sandbox/manager.js");
+          // Initialize an empty sandbox just for this run
+          sandboxManager = new SandboxManager({ 
+            template: config.sandboxTemplate,
+            apiKey: config.e2bApiKey,
+            openSandboxApiKey: config.openSandboxApiKey,
+            openSandboxDomain: config.openSandboxDomain,
+          });
+          await sandboxManager.create();
+          const { FileSync } = await import("../sandbox/sync.js");
+          const fileSync = new FileSync(process.cwd());
+          bindSandbox(sandboxManager, fileSync);
+        }
 
         const { HumanMessage, AIMessage, ToolMessage } = await import("@langchain/core/messages");
         
@@ -668,33 +642,30 @@ program
         const MAX_TURNS = 15; // Anti-doom-loop for evals
         
         try {
-          while (turnCount < MAX_TURNS) {
+          const state = {
+            globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
+You run in a hybrid environment based on user configuration. You execute commands using 'bash' and can safely evaluate tests and install dependencies.
+Always use the tools provided to you. Never read or write outside the current project directory unless explicitly requested.`,
+            projectMemory: `Evaluation run.\nInitial working directory: ${process.cwd()}`,
+            sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
+            conversationHistory
+          };
+          const stream = harness.run(state);
+          for await (const event of stream) {
             turnCount++;
-            const state = {
-              globalSystemInstructions: `You are Joone, a highly capable autonomous coding agent. 
-You run in a hybrid environment: you have read/write access to the host machine for code edits, but all code execution, testing, and dependency installation MUST happen in the isolated E2B sandbox for safety.
-Always use 'bash' to run terminal commands. Never read or write outside the current project directory unless explicitly requested.`,
-              projectMemory: "Evaluation run.",
-              sessionContext: `Environment: ${process.platform}\nCWD: ${process.cwd()}`,
-              conversationHistory
-            };
-
-            const response = await harness.step(state);
-            conversationHistory.push(response);
-
-            if (response.content && typeof response.content === "string") {
-              finalOutput += response.content + "\n";
+            if (event.event === "on_chat_model_end" && event.data?.output) {
+              const msg = event.data.output;
+              if (msg.content && typeof msg.content === "string") {
+                finalOutput += msg.content + "\n";
+              }
+              if (msg.tool_calls && msg.tool_calls.length > 0) {
+                 // LangGraph will automatically execute the tools under the hood
+                 // We don't need to manually executeToolCalls here!
+              }
             }
-
-            if (!response.tool_calls || response.tool_calls.length === 0) {
-              break; // Task complete
-            }
-
-            const toolResults = await harness.executeToolCalls(response, state);
-            conversationHistory.push(...toolResults);
           }
         } catch (e: any) {
-          await sandboxManager.destroy();
+          if (sandboxManager) await sandboxManager.destroy();
           throw e; // LangSmith catches this for the error evaluation
         }
 
@@ -711,15 +682,18 @@ Always use 'bash' to run terminal commands. Never read or write outside the curr
         // Check sandbox for uploaded/created files before ripping it down
         let fileManifest: string[] = [];
         try {
-          const result = await sandboxManager.exec(`find /workspace -type f`);
-          if (result.stdout) {
-             fileManifest = result.stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
+          if (sandboxManager) {
+            const result = await sandboxManager.exec(`find /workspace -type f`);
+            if (result.stdout) {
+               fileManifest = result.stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
+            }
           }
         } catch {
           // Ignore, fallback to empty array
         }
-
-        await sandboxManager.destroy();
+        if (sandboxManager) {
+          await sandboxManager.destroy();
+        }
 
         return {
           finalOutput,

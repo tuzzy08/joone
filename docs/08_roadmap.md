@@ -235,7 +235,7 @@ We will tackle this project moving from the foundation outward.
 3. **Message Differentiation**: Overhaul `MessageBubble.tsx` with thin persona-colored gradient borders, explicit tags, and tailored padding.
 4. **Persistent Event Nodes**: Emit critical agent events directly into the main conversation array as stylized `<Static>` nodes, while strictly ensuring they are filtered out of the API context payload to prevent token bloat.
 
-## Milestone 19: Core Engine Alignment & Host-First Execution
+## Milestone 19: Core Engine Alignment & Host-First Execution (IN PROGRESS)
 
 **Goal:** Remove Sandbox-by-default initialization, inject rich workspace context, and refactor the core loop to standard LangChain primitives.
 

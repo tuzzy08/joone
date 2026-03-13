@@ -1,63 +1,57 @@
-import { ToolCallContext, ToolMiddleware } from "./types.js";
+import { createMiddleware } from "langchain";
+import { AIMessage, HumanMessage, BaseMessage } from "@langchain/core/messages";
+import { ToolCall } from "@langchain/core/messages/tool";
 
 /**
- * Prevents the "Blind Retry" doom loop.
+ * Creates a middleware that prevents the "Blind Retry" doom loop.
  *
- * Tracks a rolling window of recent tool call signatures. If the same
- * tool + args combination appears N times consecutively, the call is
- * rejected with an instruction to try a different approach.
+ * Inspects the conversation history right before the model is called.
+ * If the last N AI messages contain the exact same tool calls, it
+ * injects a warning message to force the model to try a different approach.
  *
  * Reference: docs/02_edge_cases_and_mitigations.md — "The Blind Retry Doom Loop"
+ *
+ * @param threshold - Number of identical consecutive calls before blocking (default: 3).
  */
-export class LoopDetectionMiddleware implements ToolMiddleware {
-  readonly name = "LoopDetection";
+export function createLoopDetectionMiddleware(threshold = 3) {
+  const signature = (calls: Pick<ToolCall, "name" | "args">[]): string => {
+    return calls
+      .map((c) => `${c.name}:${JSON.stringify(c.args, Object.keys(c.args || {}).sort())}`)
+      .join("|");
+  };
 
-  private history: string[] = [];
-  private readonly threshold: number;
-
-  /**
-   * @param threshold - Number of identical consecutive calls before blocking (default: 3).
-   */
-  constructor(threshold = 3) {
-    this.threshold = threshold;
-  }
-
-  /**
-   * Creates a signature string for a tool call (name + sorted args JSON).
-   */
-  private signature(ctx: ToolCallContext): string {
-    return `${ctx.toolName}:${JSON.stringify(ctx.args, Object.keys(ctx.args).sort())}`;
-  }
-
-  before(ctx: ToolCallContext): ToolCallContext | string {
-    const sig = this.signature(ctx);
-
-    this.history.push(sig);
-
-    // Keep only the last N entries to avoid unbounded growth
-    if (this.history.length > this.threshold * 2) {
-      this.history = this.history.slice(-this.threshold * 2);
-    }
-
-    // Check if the last `threshold` entries are all identical
-    const tail = this.history.slice(-this.threshold);
-    if (
-      tail.length >= this.threshold &&
-      tail.every((s) => s === sig)
-    ) {
-      return (
-        `⚠ Loop detected: You have called "${ctx.toolName}" with identical arguments ` +
-        `${this.threshold} times consecutively. Stop this approach and try a different strategy.`
+  return createMiddleware({
+    name: "LoopDetectionMiddleware",
+    wrapModelCall: async (request, handler) => {
+      // Extract recent AI messages that have tool calls
+      const aiMessagesWithTools = request.messages.filter(
+        (m): m is AIMessage => m instanceof AIMessage && m.tool_calls !== undefined && m.tool_calls.length > 0
       );
-    }
 
-    return ctx;
-  }
+      if (aiMessagesWithTools.length >= threshold) {
+        const recent = aiMessagesWithTools.slice(-threshold);
+        const sigs = recent.map((m) => signature(m.tool_calls!));
 
-  /**
-   * Resets the history. Useful for testing or session boundaries.
-   */
-  reset(): void {
-    this.history = [];
-  }
+        const allIdentical = sigs.every((sig) => sig === sigs[0]);
+
+        if (allIdentical) {
+          // Identify the tools for the warning
+          const toolNames = recent[0].tool_calls!.map(c => c.name).join(", ");
+          
+          // Inject a strong human message to break the loop
+          const updatedMessages = [
+            ...request.messages,
+            new HumanMessage(
+              `⚠ Loop detected: You have called the tools [${toolNames}] with identical arguments ` +
+              `${threshold} times consecutively. Stop this approach and try a different strategy immediately.`
+            )
+          ];
+
+          return handler({ ...request, messages: updatedMessages });
+        }
+      }
+
+      return handler(request);
+    },
+  });
 }

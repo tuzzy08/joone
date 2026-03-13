@@ -33,6 +33,8 @@ export interface JooneConfig {
   compactModel?: string;
   /** Override model for sub-agents (default: auto-selected fast model from same provider). */
   subAgentModel?: string;
+  /** Execution mode: 'host' (local shell) or 'sandbox' (secure cloud). */
+  executionMode?: "host" | "sandbox";
 }
 
 /**
@@ -45,6 +47,7 @@ export const DEFAULT_CONFIG: JooneConfig = {
   temperature: 0,
   streaming: true,
   permissionMode: "auto",
+  executionMode: "host",
 };
 
 /**

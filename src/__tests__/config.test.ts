@@ -39,6 +39,7 @@ describe("Config Manager", () => {
     expect(config.maxTokens).toBe(4096);
     expect(config.temperature).toBe(0);
     expect(config.streaming).toBe(true);
+    expect(config.executionMode).toBe("host");
   });
 
   // ─── RED Test #2: saveConfig roundtrips with loadConfig ───

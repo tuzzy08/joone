@@ -96,6 +96,7 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 - ✅ **M15: Telemetry & Engine Bug Bash:** Bound tools natively to models preventing XML truncation, extracted precise `cache_creation_input_tokens`, and decoupled UI components from `maxTokens` generation limits.
 - ✅ **M16: TUI v2, Event Tracking & Host Dependency Mgmt:** Built `AgentEventEmitter`, a 2-Column IDE layout (`App.tsx`), `FileBrowser`, `ActionLog`, and a strictly whitelisted `install_host_dependencies` capability bypassing E2B.
 - ✅ **M18: TUI Stability & UX Polish:** Ink Scrollable `<Static>`, dynamic aesthetic `MessageBubble`, unified `Static` streaming of embedded Action Logs, and robust infinite `HITLBridge` interrupts.
+- ✅ **M19: Core Engine Alignment:** Migrated `ExecutionHarness` to natively use `createDeepAgent`, implemented `WhitelistedLocalShellBackend` for host-first architecture, injected dynamic contexts via middleware, and pruned legacy custom subagent/skill/routing logic.
 
 ### Tool Routing Summary
 
@@ -112,8 +113,8 @@ All development follows strict TDD. Currently, **95 out of 95 tests are GREEN** 
 
 ### Pending Next Steps (Where to resume)
 
-**Continue with Milestone 17:**
+**Continue with Milestone 20:**
 
-1.  **M17: MCP Client Integration** — `@modelcontextprotocol/sdk`, stdio/HTTP transport, namespaced MCP tools.
+1.  **M20: Cloud Agent Swarm Integration** — ...
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

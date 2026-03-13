@@ -21,6 +21,15 @@ _This document serves as a living changelog and status board. Any human or agent
 
 ## Changelog
 
+### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
+
+- **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.
+- **Host-First Architecture**: Introduced `executionMode` to the configuration (`JooneConfig`), defaulting to `"host"`. For host execution, integrated `WhitelistedLocalShellBackend` to safely restrict shell execution to safe binaries, bypassing explicit sandbox virtualization dynamically.
+- **Context Injection**: Implemented `injectSystemMessage` as a native middleware, seamlessly weaving `process.cwd()` and project context into the static prompt during `agentLoop.ts`, mitigating the need for appended `<system-reminder>` blocks.
+- **Deprecated Framework Pruning**: Aggressively pruned hundreds of lines of obsolete bespoke classes including `SubAgentManager`, `SkillLoader`, `PermissionMiddleware`, `ToolRouter` logic, `DynamicToolInterface` definitions, and corresponding bespoke suites, substituting natively with Deep Agent architectures and LangChain `StructuredTool` primitives.
+- **Eval Loop Upgrade**: Refactored `joone eval` CLI evaluations to stream events organically through `harness.run(state)` rather than statically looping legacy `.step()` directives.
+- **Tests**: All 103 tests strictly GREEN ensuring TypeScript integrity.
+
 ### 2026-02-22: Project Initialization & Context Engine
 
 - **Docs Setup**: Extracted key insights from Harness Engineering and Prompt Caching research into the `docs/` folder (`01_insights...` through `08_roadmap...`).
