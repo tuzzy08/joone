@@ -1,0 +1,36 @@
+import { describe, expect, it } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+describe("Desktop UI shell", () => {
+  it("replaces the placeholder chat with a bridge-driven app shell", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+
+    expect(source).toContain("getDesktopBridge");
+    expect(source).toContain("useEffect");
+    expect(source).not.toContain("const sampleMessages");
+  });
+
+  it("provides a browser bridge for local web development", () => {
+    const source = fs.readFileSync(
+      path.resolve("desktop/src/bridge/browserBridge.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("createBrowserDesktopBridge");
+    expect(source).toContain("startSession");
+    expect(source).toContain("submitMessage");
+    expect(source).toContain("listSessions");
+  });
+
+  it("provides a Tauri bridge adapter for desktop runtime calls", () => {
+    const source = fs.readFileSync(
+      path.resolve("desktop/src/bridge/tauriBridge.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("createTauriDesktopBridge");
+    expect(source).toContain("invoke");
+    expect(source).toContain("listen");
+  });
+});

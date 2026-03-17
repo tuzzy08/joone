@@ -73,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **117 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the new shared runtime service tests, desktop scaffold tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
+All development follows strict TDD. Currently, **120 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, the new desktop UI shell tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
 
 ### Completed Milestones
 
@@ -122,6 +122,7 @@ All development follows strict TDD. Currently, **117 tests are GREEN**, includin
 - A desktop IPC bridge lives in `src/desktop/ipc.ts`, defining the serializable event surface for Tauri-facing commands and subscriptions.
 - The first desktop scaffold now exists under `desktop/` (React shell) and `src-tauri/` (Rust/Tauri shell). This is an MVP scaffold only; the desktop runtime is not yet fully wired into a runnable packaged app because the frontend/Tauri dependencies and end-to-end command binding still need to be completed.
 - `src/ui/App.tsx` now accepts an optional `onStateChange` callback so the shared runtime extraction can observe session state without re-implementing the current TUI loop all at once.
+- The second M20 slice makes the desktop web shell actually runnable: `desktop/src/bridge/` now contains a browser fallback bridge plus a Tauri adapter, the React shell in `desktop/src/App.tsx` uses that bridge rather than hardcoded sample content, and `npm run desktop:web:build` now completes successfully after adding the required frontend dependencies.
 
 ### Tool Routing Summary
 
@@ -140,6 +141,6 @@ All development follows strict TDD. Currently, **117 tests are GREEN**, includin
 
 **Continue with Milestone 20:**
 
-1.  **M20: Tauri Cross-Platform Desktop Client** — finish wiring the Tauri command/event layer to `JooneRuntimeService`, replace the placeholder desktop shell with live session data, and add runnable local desktop tooling/dependencies.
+1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

@@ -53,6 +53,13 @@ _This document serves as a living changelog and status board. Any human or agent
 - **CLI Preservation**: Kept the CLI supported, started routing `joone sessions` through the shared runtime service, and added App state-sync plumbing (`onStateChange`) so the runtime extraction can continue without replacing the TUI in one jump.
 - **Verification**: Added `tests/runtime/runtimeService.test.ts` and `tests/desktop/desktopScaffold.test.ts`, then verified with targeted Vitest runs and `npm run build`.
 
+### 2026-03-18: Milestone 20 Slice 2 - Runnable Desktop Web Shell (COMPLETE)
+
+- **Desktop Bridge Layer**: Added `desktop/src/bridge/` with a typed bridge contract, a browser fallback bridge for local web development, and a Tauri adapter that targets invoke/listen-based runtime commands.
+- **Live Desktop Shell**: Replaced the static placeholder desktop page with a bridge-driven React shell that loads config, lists sessions, starts/resumes sessions, submits prompts, renders conversation state, and records runtime activity.
+- **Tooling**: Added the missing frontend packages (`vite`, `@vitejs/plugin-react`, `react-dom`, `@tauri-apps/api`) so the desktop web build is no longer just a placeholder script.
+- **Verification**: Added `tests/desktop/desktopUiShell.test.ts`, ran the focused desktop/runtime Vitest suite, `npm run build`, and confirmed `npm run desktop:web:build` succeeds.
+
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 
 - **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.
