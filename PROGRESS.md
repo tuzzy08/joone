@@ -13,9 +13,9 @@ _This document serves as a living changelog and status board. Any human or agent
 
 ## Next Steps
 
-1.  **Milestone 7 Evals**: Hook LangSmith datasets to ExecutionHarness for regression testing.
-2.  **Dataset CI**: Build `joone eval` CLI command to assert Cache Hit Rate > 90% and Cost < $X.
-3.  **Security Tier 2 & 3 (Planned)**: OS Keychain and encrypted config.
+1.  **Milestone 20**: Continue the phased Tauri desktop MVP on top of the new shared runtime layer.
+2.  **Desktop IPC Wiring**: Connect the Tauri shell commands/events to the Node runtime service end-to-end.
+3.  **Desktop Packaging**: Add the remaining frontend/tooling dependencies and CI packaging once the local MVP loop is interactive.
 
 ---
 
@@ -35,6 +35,23 @@ _This document serves as a living changelog and status board. Any human or agent
 - **Interactive Startup Improvement**: Refactored `joone start` to render the Ink app before constructing the model, tools, and harness. Runtime initialization now happens on demand from the UI via `createHarness`, which makes the CLI appear sooner and shifts model/sandbox setup off the critical render path.
 - **Benchmark Mode**: Added `src/cli/startupBenchmark.ts` plus a new `joone start --benchmark-startup` mode that prints startup milestones and exits automatically for repeatable performance checks.
 - **Verification**: Added `tests/cli/indexImports.test.ts` and `tests/cli/startupBenchmark.test.ts`, kept the first-turn harness regression green, verified the project still compiles with `npm run build`, and captured one local sample showing ~1.3s to UI interactivity and ~2.7s to full harness readiness.
+
+### 2026-03-16: Startup Stall and Ctrl+C Perf Warning Fix (COMPLETE)
+
+- **React Runtime Fix**: Defaulted the CLI runtime to `NODE_ENV=production` in `src/cli/index.ts` before Ink/React imports so packaged sessions stop using React's development reconciler, which was contributing to slow startup and `MaxPerformanceEntryBufferExceededWarning` noise on shutdown.
+- **UI Import Diet**: Trimmed `src/ui/App.tsx` so heavyweight LangChain runtime modules are no longer pulled in at initial UI module load. `ExecutionHarness` is now type-only in the App module, while `HumanMessage` and LangGraph `Command` are imported lazily on first-use paths.
+- **Clean Shutdown Path**: Removed direct `process.exit(0)` calls from the TUI soft-exit paths so Ctrl+C and `/exit` return control to the CLI, allowing post-exit cleanup and benchmark reporting to finish naturally.
+- **Regression Coverage**: Added `tests/ui/appLifecycle.test.ts` and extended `tests/cli/indexImports.test.ts` to lock in the production runtime default and lazy UI import contract.
+- **Measured Result**: `joone start --benchmark-startup --no-stream` improved from roughly **18.8s to UI mount** before the App import cleanup to roughly **1.9s to interactive UI** and **3.5s to harness ready** after the fix.
+
+### 2026-03-17: Milestone 20 Reconciliation and Desktop Scaffold (IN PROGRESS)
+
+- **Docs Reconciled**: Standardized Milestone 20 around the roadmap's **Tauri Cross-Platform Desktop Client** and dropped the conflicting handover reference to "Cloud Agent Swarm Integration".
+- **Shared Runtime Layer**: Added `src/runtime/service.ts` and `src/runtime/types.ts` to expose a reusable Node-side runtime service for config I/O, session prep/start/resume, event subscription, prompt submission, cancellation, and cleanup.
+- **Desktop IPC Contract**: Added `src/desktop/ipc.ts` as the serializable bridge surface for desktop commands/events (`session:started`, `session:state`, `agent:token`, `tool:start`, `tool:end`, `hitl:*`, `session:error`, `session:completed`).
+- **Desktop Scaffold**: Added a first-pass Tauri shell (`src-tauri/`) plus a React desktop shell (`desktop/`) with a two-pane layout that mirrors the current TUI concepts without porting Ink directly.
+- **CLI Preservation**: Kept the CLI supported, started routing `joone sessions` through the shared runtime service, and added App state-sync plumbing (`onStateChange`) so the runtime extraction can continue without replacing the TUI in one jump.
+- **Verification**: Added `tests/runtime/runtimeService.test.ts` and `tests/desktop/desktopScaffold.test.ts`, then verified with targeted Vitest runs and `npm run build`.
 
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 

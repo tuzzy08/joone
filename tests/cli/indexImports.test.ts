@@ -22,6 +22,12 @@ describe("CLI entrypoint imports", () => {
     expect(source).toContain('.option("--benchmark-startup"');
   });
 
+  it("defaults the CLI runtime to production mode before rendering Ink", () => {
+    const source = fs.readFileSync(cliIndexPath, "utf8");
+
+    expect(source).toContain('process.env.NODE_ENV ??= "production";');
+  });
+
   it("prints the benchmark report after the TUI exits", () => {
     const source = fs.readFileSync(cliIndexPath, "utf8");
 

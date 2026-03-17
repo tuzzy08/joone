@@ -37,6 +37,9 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
 - **The "Fake Lazy Load" Startup Stall:**
   - _The Edge Case:_ A CLI entrypoint moves some imports to `import()` calls but still statically imports heavyweight modules like model factories or provider managers at top-level, or still awaits full runtime construction before first render. Users experience multi-second or multi-minute startup even though the code looks "lazy".
   - _Mitigation:_ Keep the entry module lightweight, dynamically import heavyweight runtime modules only inside the command path that needs them, and defer expensive agent/model/sandbox construction until after the UI is mounted or the first task actually needs it. Protect the entrypoint with a regression test that forbids eager heavyweight imports.
+- **The "Dev Reconciler in Production" Perf Leak:**
+  - _The Edge Case:_ A packaged Ink CLI starts without `NODE_ENV=production`, so React loads the development reconciler. On long-lived sessions or render-heavy paths this can flood Node's global `perf_hooks` buffer with `performance.measure` entries, trigger `MaxPerformanceEntryBufferExceededWarning`, and slow startup noticeably.
+  - _Mitigation:_ Default the CLI runtime to `NODE_ENV=production` before importing Ink/React, keep the initial UI module free of heavyweight runtime imports, and let the outer CLI own process shutdown so React/Ink can tear down cleanly.
 
 ## 3. Security & Execution Edge Cases (Tool Exploits)
 

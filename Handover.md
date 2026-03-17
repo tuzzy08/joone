@@ -73,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **107 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
+All development follows strict TDD. Currently, **117 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the new shared runtime service tests, desktop scaffold tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
 
 ### Completed Milestones
 
@@ -110,7 +110,18 @@ All development follows strict TDD. Currently, **107 tests are GREEN**, includin
 - `joone start` no longer blocks initial Ink render on model creation, tool loading, or sandbox wiring. The UI receives a `createHarness` callback and initializes the runtime on demand, making startup visibly faster even when LangChain/provider imports are expensive.
 - The CLI import contract is protected by `tests/cli/indexImports.test.ts` so future refactors do not accidentally reintroduce eager heavyweight imports.
 - `joone start --benchmark-startup` is now available for repeatable startup profiling. It records milestone timings (CLI entry, config load, UI interactive, model ready, harness ready), prints a report, and exits automatically.
-- One local sample after the refactor measured roughly **1.3s to interactive UI** and **2.7s to harness ready**, with model creation remaining the dominant post-render cost.
+- The CLI now defaults `NODE_ENV` to `production` before importing Ink/React so packaged runs do not fall back to React's development reconciler, which was inflating startup latency and generating `MaxPerformanceEntryBufferExceededWarning` warnings during long-lived sessions.
+- `src/ui/App.tsx` no longer statically imports heavyweight LangChain runtime modules at startup. `ExecutionHarness` is type-only in the UI module, while `HumanMessage` and `Command` are loaded lazily on the interaction paths that actually need them.
+- `src/ui/App.tsx` also no longer calls `process.exit(0)` directly on Ctrl+C or `/exit`; the TUI now requests a soft exit and lets the CLI regain control so post-exit cleanup and benchmark reporting can complete.
+- A benchmark sample before the latest UI import cleanup showed roughly **18.8s to UI mount**; after the fix the same benchmark dropped to roughly **1.9s to interactive UI** and **3.5s to harness ready**, with runtime initialization remaining the dominant post-render cost.
+
+### Milestone 20 Desktop Foundation
+
+- Milestone 20 is now explicitly the roadmap's **Tauri Cross-Platform Desktop Client**. The earlier "Cloud Agent Swarm Integration" note was stale and should not be used as a planning reference.
+- A new shared runtime service lives in `src/runtime/service.ts`. It owns config access, session prep/start/resume, event subscription, prompt submission, session persistence, and cleanup behind a Node-safe API that can be reused by both CLI and desktop clients.
+- A desktop IPC bridge lives in `src/desktop/ipc.ts`, defining the serializable event surface for Tauri-facing commands and subscriptions.
+- The first desktop scaffold now exists under `desktop/` (React shell) and `src-tauri/` (Rust/Tauri shell). This is an MVP scaffold only; the desktop runtime is not yet fully wired into a runnable packaged app because the frontend/Tauri dependencies and end-to-end command binding still need to be completed.
+- `src/ui/App.tsx` now accepts an optional `onStateChange` callback so the shared runtime extraction can observe session state without re-implementing the current TUI loop all at once.
 
 ### Tool Routing Summary
 
@@ -129,6 +140,6 @@ All development follows strict TDD. Currently, **107 tests are GREEN**, includin
 
 **Continue with Milestone 20:**
 
-1.  **M20: Cloud Agent Swarm Integration** — ...
+1.  **M20: Tauri Cross-Platform Desktop Client** — finish wiring the Tauri command/event layer to `JooneRuntimeService`, replace the placeholder desktop shell with live session data, and add runnable local desktop tooling/dependencies.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

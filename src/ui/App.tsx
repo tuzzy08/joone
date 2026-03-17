@@ -7,21 +7,17 @@ import { MessageBubble } from "./components/MessageBubble.js";
 import { StreamingText } from "./components/StreamingText.js";
 import { ToolCallPanel, ToolCallStatus } from "./components/ToolCallPanel.js";
 import { HITLPrompt } from "./components/HITLPrompt.js";
-import { ActionLog } from "./components/ActionLog.js";
 import { FileBrowser } from "./components/FileBrowser.js";
-import { ExecutionHarness } from "../core/agentLoop.js";
-import { ContextState } from "../core/promptBuilder.js";
+import type { ExecutionHarness } from "../core/agentLoop.js";
+import type { ContextState } from "../core/promptBuilder.js";
 import { countMessageTokens } from "../core/tokenCounter.js";
 import { getProviderContextLimit } from "../core/contextGuard.js";
-import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
-import { Command } from "@langchain/langgraph";
 import {
   HITLBridge,
   HITLQuestion,
   HITLPermissionRequest,
 } from "../hitl/bridge.js";
 import { createDefaultRegistry } from "../commands/builtinCommands.js";
-import { CommandRegistry } from "../commands/commandRegistry.js";
 import { AgentEvent } from "../core/events.js";
 
 export interface Message {
@@ -43,6 +39,7 @@ interface AppProps {
   createHarness: () => Promise<ExecutionHarness>;
   initialState: ContextState;
   maxTokens: number;
+  onStateChange?: (state: ContextState) => void;
   benchmarkStartup?: boolean;
   onStartupBenchmarkMark?: (name: string) => void;
   onStartupBenchmarkComplete?: () => void;
@@ -55,6 +52,7 @@ export const App: React.FC<AppProps> = ({
   createHarness,
   initialState,
   maxTokens,
+  onStateChange,
   benchmarkStartup = false,
   onStartupBenchmarkMark,
   onStartupBenchmarkComplete,
@@ -190,7 +188,8 @@ export const App: React.FC<AppProps> = ({
   const stateRef = React.useRef(contextState);
   useEffect(() => {
     stateRef.current = contextState;
-  }, [contextState]);
+    onStateChange?.(contextState);
+  }, [contextState, onStateChange]);
 
   const performGracefulExit = async () => {
     try {
@@ -204,7 +203,6 @@ export const App: React.FC<AppProps> = ({
       // Ignore errors during exit
     } finally {
       exit();
-      process.exit(0);
     }
   };
 
@@ -294,7 +292,7 @@ export const App: React.FC<AppProps> = ({
   const runAgentLoop = async (
     currentState: ContextState,
     activeHarness: ExecutionHarness,
-    resumeCommand?: Command,
+    resumeCommand?: unknown,
   ) => {
     try {
       if (!resumeCommand) {
@@ -303,7 +301,7 @@ export const App: React.FC<AppProps> = ({
         setStreamingTokens([]);
       }
 
-      const stream = activeHarness.run(currentState, resumeCommand);
+      const stream = activeHarness.run(currentState, resumeCommand as any);
       let nextHistory = [...currentState.conversationHistory];
       let finalState: any = null;
 
@@ -369,6 +367,7 @@ export const App: React.FC<AppProps> = ({
           const resumePayload = approved
             ? { action: "approve" }
             : { action: "reject" };
+          const { Command } = await import("@langchain/langgraph");
           const command = new Command({ resume: resumePayload });
 
           // Recurse to resume the graph
@@ -439,7 +438,6 @@ export const App: React.FC<AppProps> = ({
           ]);
           setTimeout(() => {
             requestSoftExit();
-            process.exit(0);
           }, 500);
           return;
         }
@@ -463,6 +461,7 @@ export const App: React.FC<AppProps> = ({
     setMessages((prev) => [...prev, { role: "user", content: userText }]);
 
     // 2. Update Engine State
+    const { HumanMessage } = await import("@langchain/core/messages");
     const humanMsg = new HumanMessage(userText);
     const updatedState = {
       ...contextState,

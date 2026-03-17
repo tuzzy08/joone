@@ -17,7 +17,10 @@ import {
 } from "@clack/prompts";
 import { loadConfig, saveConfig, JooneConfig } from "./config.js";
 import { StartupBenchmark } from "./startupBenchmark.js";
+import { JooneRuntimeService } from "../runtime/service.js";
 import type { SandboxManager } from "../sandbox/manager.js";
+
+process.env.NODE_ENV ??= "production";
 
 const CONFIG_PATH = path.join(os.homedir(), ".joone", "config.json");
 
@@ -83,6 +86,10 @@ const PROVIDER_MODELS: Record<string, { value: string; label: string }[]> = {
 const program = new Command();
 const startupBenchmark = new StartupBenchmark();
 startupBenchmark.mark("cli:entry");
+const runtimeService = new JooneRuntimeService({
+  configPath: CONFIG_PATH,
+  cwd: process.cwd(),
+});
 
 async function loadModelFactory() {
   return import("./modelFactory.js");
@@ -535,9 +542,7 @@ program
   .command("sessions")
   .description("List all persistent sessions available for resumption")
   .action(async () => {
-    const { SessionStore } = await import("../core/sessionStore.js");
-    const store = new SessionStore();
-    const sessions = await store.listSessions();
+    const sessions = await runtimeService.listSessions();
 
     if (sessions.length === 0) {
       console.log(chalk.dim("\n  No saved sessions found.\n"));

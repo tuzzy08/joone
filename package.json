@@ -1,6 +1,6 @@
 {
   "name": "joonecli",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "An autonomous coding agent",
   "files": [
     "dist"
@@ -11,6 +11,10 @@
   },
   "scripts": {
     "build": "tsc",
+    "desktop:web:dev": "npx vite --config desktop/vite.config.ts --host 0.0.0.0 --port 1420",
+    "desktop:web:build": "npx vite build --config desktop/vite.config.ts",
+    "desktop:dev": "npx @tauri-apps/cli dev --config src-tauri/tauri.conf.json",
+    "desktop:build": "npx @tauri-apps/cli build --config src-tauri/tauri.conf.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "node ./dist/cli/postinstall.js"

@@ -1,0 +1,115 @@
+:root {
+  color-scheme: light;
+  --bg: #f4efe6;
+  --panel: rgba(255, 250, 242, 0.92);
+  --line: #d8c7ad;
+  --text: #1f1a17;
+  --muted: #675d54;
+  --accent: #b45a2a;
+  --accent-2: #214f7a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(180, 90, 42, 0.18), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(33, 79, 122, 0.16), transparent 28%),
+    var(--bg);
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  min-height: 100vh;
+  gap: 20px;
+  padding: 20px;
+}
+
+.sidebar,
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel,
+.hero,
+.conversation,
+.composer {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--panel);
+  box-shadow: 0 14px 40px rgba(53, 41, 30, 0.08);
+}
+
+.panel,
+.hero,
+.composer {
+  padding: 18px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.conversation {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble {
+  max-width: 70%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  line-height: 1.5;
+}
+
+.bubble-system {
+  background: rgba(33, 79, 122, 0.08);
+  border: 1px solid rgba(33, 79, 122, 0.18);
+}
+
+.bubble-agent {
+  align-self: flex-end;
+  background: rgba(180, 90, 42, 0.12);
+  border: 1px solid rgba(180, 90, 42, 0.24);
+}
+
+.composer {
+  display: flex;
+  gap: 12px;
+}
+
+.input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fffdf9;
+  padding: 14px 16px;
+}
+
+.button {
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), #d47f39);
+  color: white;
+  padding: 12px 18px;
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+}
