@@ -22,6 +22,51 @@ struct DesktopConfig {
     streaming: bool,
 }
 
+#[derive(Serialize)]
+struct DesktopMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Serialize)]
+struct DesktopMetrics {
+    #[serde(rename = "totalTokens")]
+    total_tokens: u32,
+    #[serde(rename = "cacheHitRate")]
+    cache_hit_rate: u32,
+    #[serde(rename = "toolCallCount")]
+    tool_call_count: u32,
+    #[serde(rename = "turnCount")]
+    turn_count: u32,
+    #[serde(rename = "totalCost")]
+    total_cost: u32,
+}
+
+#[derive(Serialize)]
+struct DesktopSessionSnapshot {
+    #[serde(rename = "sessionId")]
+    session_id: String,
+    provider: String,
+    model: String,
+    messages: Vec<DesktopMessage>,
+    metrics: DesktopMetrics,
+}
+
+#[derive(Deserialize)]
+struct SessionHeader {
+    #[serde(rename = "sessionId")]
+    session_id: String,
+    #[serde(rename = "lastSavedAt")]
+    last_saved_at: u64,
+    provider: String,
+    model: String,
+}
+
+struct PersistedSessionSnapshot {
+    snapshot: DesktopSessionSnapshot,
+    last_saved_at: u64,
+}
+
 #[tauri::command]
 fn runtime_base_url() -> String {
     std::env::var("JOONE_DESKTOP_RUNTIME_URL")
@@ -80,9 +125,81 @@ fn runtime_load_config() -> DesktopConfig {
     config
 }
 
+#[tauri::command]
+fn runtime_list_sessions() -> Vec<DesktopSessionSnapshot> {
+    let Some(sessions_dir) = joone_sessions_dir() else {
+        return Vec::new();
+    };
+
+    let Ok(entries) = fs::read_dir(sessions_dir) else {
+        return Vec::new();
+    };
+
+    let mut sessions = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
+            continue;
+        }
+
+        if let Some(snapshot) = read_session_snapshot(&path) {
+            sessions.push(snapshot);
+        }
+    }
+
+    sessions.sort_by(|left, right| right.last_saved_at.cmp(&left.last_saved_at));
+    sessions.into_iter().map(|item| item.snapshot).collect()
+}
+
 fn joone_config_path() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
     Some(PathBuf::from(home).join(".joone").join("config.json"))
+}
+
+fn joone_sessions_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
+    Some(PathBuf::from(home).join(".joone").join("sessions"))
+}
+
+fn read_session_snapshot(path: &PathBuf) -> Option<PersistedSessionSnapshot> {
+    let raw = fs::read_to_string(path).ok()?;
+    let mut lines = raw.lines();
+    let header_line = lines.next()?;
+    let header_json = serde_json::from_str::<Value>(header_line).ok()?;
+    let header = serde_json::from_value::<SessionHeader>(header_json.get("header")?.clone()).ok()?;
+
+    let messages = lines
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .map(|message| DesktopMessage {
+            role: match message.get("type").and_then(Value::as_str) {
+                Some("human") => "user".to_string(),
+                Some("ai") => "agent".to_string(),
+                _ => "system".to_string(),
+            },
+            content: message
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string(),
+        })
+        .collect();
+
+    Some(PersistedSessionSnapshot {
+        last_saved_at: header.last_saved_at,
+        snapshot: DesktopSessionSnapshot {
+            session_id: header.session_id,
+            provider: header.provider,
+            model: header.model,
+            messages,
+            metrics: DesktopMetrics {
+                total_tokens: 0,
+                cache_hit_rate: 0,
+                tool_call_count: 0,
+                turn_count: 0,
+                total_cost: 0,
+            },
+        },
+    })
 }
 
 fn main() {
@@ -90,7 +207,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             runtime_base_url,
             runtime_status,
-            runtime_load_config
+            runtime_load_config,
+            runtime_list_sessions
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Joone Desktop");

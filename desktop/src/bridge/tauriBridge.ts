@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createHttpDesktopBridge } from "./httpBridge";
-import type { DesktopBridge, DesktopBridgeStatus, DesktopConfig } from "./types";
+import type {
+  DesktopBridge,
+  DesktopBridgeStatus,
+  DesktopConfig,
+  DesktopSessionSnapshot,
+} from "./types";
 
 export function createTauriDesktopBridge(): DesktopBridge {
   let bridgePromise: Promise<DesktopBridge> | undefined;
@@ -33,7 +38,7 @@ export function createTauriDesktopBridge(): DesktopBridge {
       await (await getBridge()).saveConfig(config);
     },
     async listSessions() {
-      return (await getBridge()).listSessions();
+      return invoke<DesktopSessionSnapshot[]>("runtime_list_sessions");
     },
     async startSession() {
       return (await getBridge()).startSession();

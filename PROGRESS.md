@@ -331,3 +331,19 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 13 - Tauri Native Session Listing
+
+- Moved `listSessions()` off the Tauri HTTP bridge path and onto a real native command.
+- Updated `desktop/src/bridge/tauriBridge.ts` so `listSessions()` now calls `invoke<DesktopSessionSnapshot[]>("runtime_list_sessions")`.
+- Added a native session reader in `src-tauri/src/main.rs` that:
+  - scans `~/.joone/sessions/*.jsonl`
+  - reads the saved session header and message lines directly
+  - maps saved LangChain message types into desktop roles (`user`, `agent`, `system`)
+  - returns desktop snapshots sorted by `lastSavedAt`
+- This keeps Tauri startup and saved-session browsing off the HTTP bridge while session start/resume/message execution still migrate in later slices.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

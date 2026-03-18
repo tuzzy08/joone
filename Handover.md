@@ -134,6 +134,7 @@ All development follows strict TDD. Currently, **126 tests are GREEN**, includin
 - The tenth M20 slice adds desktop error containment. `desktop/src/main.tsx` now wraps the app in `DesktopErrorBoundary`, while `desktop/src/App.tsx` catches startup/session/message bridge failures and surfaces them as `Last error:` plus activity log entries instead of leaving uncaught promise rejections in the browser console.
 - The eleventh M20 slice moves Tauri startup status/config off the frontend HTTP bridge. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_status` and `runtime_load_config` commands for startup, while `src-tauri/src/main.rs` implements those commands directly in Rust. Session/message flows still use the HTTP bridge in Tauri mode for now.
 - The twelfth M20 slice adds desktop recovery toasts and retry actions. `desktop/src/App.tsx` now tracks the last failed async action, surfaces it as a floating toast, and exposes `Retry last action` / `Dismiss` controls so startup/session/message failures can be retried from the UI without a full reload.
+- The thirteenth M20 slice moves Tauri saved-session listing off the HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls `runtime_list_sessions`, and `src-tauri/src/main.rs` reads `~/.joone/sessions/*.jsonl` directly to build desktop snapshots sorted by recency. Session start/resume/message execution still remain on the HTTP bridge in Tauri mode.
 
 ### Tool Routing Summary
 
