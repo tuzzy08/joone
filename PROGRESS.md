@@ -231,3 +231,17 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 - **Config**: Added `permissionMode` to `JooneConfig` (default: `"auto"`).
 - **Edge Cases**: Added 8 new scenarios covering retry/self-recovery, HITL timeouts, permission misconfiguration, and skills sync.
 - **Tests**: 24 new tests (14 retry/errors + 10 HITL/permission) all GREEN. TypeScript build clean.
+
+### 2026-03-18: Milestone 20 Slice 6 - Desktop Bridge Status Visibility
+
+- Added a serializable `DesktopBridgeStatus` contract in `desktop/src/bridge/types.ts` so every desktop bridge can report its active mode (`browser`, `http`, or `tauri`), backend type, health, and optional base URL.
+- Implemented `getStatus()` across the browser, HTTP, and Tauri bridges:
+  - `browserBridge` now explicitly reports a healthy mock backend.
+  - `httpBridge` now probes `/health` and marks the runtime ready/unavailable without blocking the rest of the shell.
+  - `tauriBridge` now preserves the Tauri transport identity while reusing the HTTP-backed runtime health check.
+- Updated `desktop/src/App.tsx` so the desktop shell shows `Bridge:` and `Runtime:` in the workspace panel, making it obvious whether the app is running on the mock fallback or a real runtime-backed path.
+- Added `tests/desktop/desktopBridgeStatus.test.ts` first, then implemented the minimum code to make it pass per the TDD workflow.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopHttpBridge.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

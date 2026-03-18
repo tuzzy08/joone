@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getDesktopBridge } from "./bridge";
 import type {
   DesktopBridge,
+  DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
   DesktopSessionSnapshot,
@@ -10,6 +11,9 @@ import type {
 export function App() {
   const bridge = useMemo<DesktopBridge>(() => getDesktopBridge(), []);
   const [config, setConfig] = useState<DesktopConfig | null>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<DesktopBridgeStatus | null>(
+    null,
+  );
   const [sessions, setSessions] = useState<DesktopSessionSnapshot[]>([]);
   const [activeSession, setActiveSession] = useState<DesktopSessionSnapshot | null>(
     null,
@@ -19,7 +23,7 @@ export function App() {
   const [status, setStatus] = useState("Idle");
 
   useEffect(() => {
-    void hydrateShell(bridge, setConfig, setSessions, setActivity);
+    void hydrateShell(bridge, setConfig, setBridgeStatus, setSessions, setActivity);
   }, [bridge]);
 
   useEffect(() => {
@@ -90,6 +94,16 @@ export function App() {
         <section className="panel">
           <h2>Workspace</h2>
           <p>{config ? `${config.provider} / ${config.model}` : "Loading..."}</p>
+          {/* Keep the active transport explicit while the desktop shell still supports a temporary mock bridge. */}
+          <p>Bridge: {bridgeStatus?.mode ?? "Loading..."}</p>
+          <p>
+            Runtime:{" "}
+            {bridgeStatus
+              ? bridgeStatus.healthy
+                ? `${bridgeStatus.backend} ready`
+                : `${bridgeStatus.backend} unavailable`
+              : "Checking..."}
+          </p>
           <strong>{activeSession?.sessionId ?? "No active session"}</strong>
         </section>
 
@@ -181,17 +195,22 @@ export function App() {
 async function hydrateShell(
   bridge: DesktopBridge,
   setConfig: (config: DesktopConfig) => void,
+  setBridgeStatus: (status: DesktopBridgeStatus) => void,
   setSessions: (sessions: DesktopSessionSnapshot[]) => void,
   setActivity: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
-  const [config, sessions] = await Promise.all([
+  const [bridgeStatus, config, sessions] = await Promise.all([
+    bridge.getStatus(),
     bridge.loadConfig(),
     bridge.listSessions(),
   ]);
 
   setConfig(config);
+  setBridgeStatus(bridgeStatus);
   setSessions(sessions);
-  setActivity(["Desktop shell ready."]);
+  setActivity([
+    `Desktop shell ready via ${bridgeStatus.mode} bridge (${bridgeStatus.backend}).`,
+  ]);
 }
 
 function upsertSession(

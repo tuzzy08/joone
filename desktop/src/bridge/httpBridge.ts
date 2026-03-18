@@ -1,5 +1,6 @@
 import type {
   DesktopBridge,
+  DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
   DesktopSessionSnapshot,
@@ -7,6 +8,24 @@ import type {
 
 export function createHttpDesktopBridge(baseUrl: string): DesktopBridge {
   return {
+    async getStatus() {
+      try {
+        const health = await getJson<{ ok: boolean }>(`${baseUrl}/health`);
+        return {
+          mode: "http",
+          backend: "runtime",
+          healthy: health.ok,
+          baseUrl,
+        };
+      } catch {
+        return {
+          mode: "http",
+          backend: "runtime",
+          healthy: false,
+          baseUrl,
+        };
+      }
+    },
     async loadConfig() {
       return getJson<DesktopConfig>(`${baseUrl}/config`);
     },

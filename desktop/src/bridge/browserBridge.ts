@@ -1,5 +1,6 @@
 import type {
   DesktopBridge,
+  DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
   DesktopSessionSnapshot,
@@ -14,8 +15,16 @@ const DEFAULT_CONFIG: DesktopConfig = {
 export function createBrowserDesktopBridge(): DesktopBridge {
   const sessions = new Map<string, DesktopSessionSnapshot>();
   const listeners = new Map<string, Set<(event: DesktopEvent) => void>>();
+  const status: DesktopBridgeStatus = {
+    mode: "browser",
+    backend: "mock",
+    healthy: true,
+  };
 
   return {
+    async getStatus() {
+      return status;
+    },
     async loadConfig() {
       return DEFAULT_CONFIG;
     },

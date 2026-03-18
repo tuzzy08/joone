@@ -4,6 +4,13 @@ export interface DesktopConfig {
   streaming: boolean;
 }
 
+export interface DesktopBridgeStatus {
+  mode: "browser" | "http" | "tauri";
+  backend: "mock" | "runtime";
+  healthy: boolean;
+  baseUrl?: string;
+}
+
 export interface DesktopMessage {
   role: "user" | "agent" | "system";
   content: string;
@@ -45,6 +52,7 @@ export type DesktopEvent =
   | { type: "session:completed"; sessionId: string };
 
 export interface DesktopBridge {
+  getStatus(): Promise<DesktopBridgeStatus>;
   loadConfig(): Promise<DesktopConfig>;
   saveConfig(config: DesktopConfig): Promise<void>;
   listSessions(): Promise<DesktopSessionSnapshot[]>;
