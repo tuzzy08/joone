@@ -1,9 +1,8 @@
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
+import { resolveNpmCliPath } from "./npmCli.js";
 
-const require = createRequire(import.meta.url);
 const nodeExec = process.execPath;
-const npmCli = require.resolve("npm/bin/npm-cli.js");
+const npmCli = resolveNpmCliPath();
 
 const runtime = spawn(nodeExec, [npmCli, "run", "desktop:runtime:dev"], {
   stdio: "inherit",

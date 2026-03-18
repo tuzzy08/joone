@@ -245,3 +245,17 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopHttpBridge.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 7 - Desktop Dev Launcher Fix
+
+- Fixed the `npm run desktop:web:dev` startup regression where `src/desktop/webDev.ts` crashed immediately with `Cannot find module 'npm/bin/npm-cli.js'`.
+- Added `src/desktop/npmCli.ts` with `resolveNpmCliPath()`, which now:
+  - prefers `process.env.npm_execpath` when the launcher is already running under npm
+  - falls back to the npm bundle shipped beside the active Node install (important for the Windows NVM setup used in this project)
+  - only then attempts package-based npm resolution
+- Updated `src/desktop/webDev.ts` to use the shared resolver instead of the broken hardcoded `require.resolve("npm/bin/npm-cli.js")` path.
+- Added `tests/desktop/npmCliPath.test.ts` first, then implemented the resolver to satisfy the new red-green coverage.
+- Verification completed:
+  - `npm test -- tests/desktop/npmCliPath.test.ts tests/desktop/desktopDevWorkflow.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
