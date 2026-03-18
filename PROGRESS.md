@@ -73,6 +73,12 @@ _This document serves as a living changelog and status board. Any human or agent
 - **New Diagram**: Added a new Mermaid system diagram showing how the desktop UI now reaches the same shared runtime through either Tauri commands/events or HTTP/SSE during local development.
 - **Clarified Browser Fallback**: Documented that the browser fallback is a frontend-only mock bridge used when no real runtime transport is attached, not a production execution path.
 
+### 2026-03-18: Milestone 20 Slice 4 - Unified Desktop Dev Launcher (COMPLETE)
+
+- **Single Dev Entry**: Added `src/desktop/webDev.ts` so `npm run desktop:web:dev` now launches the local runtime server and Vite together instead of requiring a manual two-process setup.
+- **Backend-First Dev Mode**: The launcher injects `VITE_JOONE_DESKTOP_API_URL=http://127.0.0.1:3011`, so local desktop frontend work now prefers the real runtime-backed HTTP bridge over the browser mock by default.
+- **Verification**: Added `tests/desktop/desktopDevWorkflow.test.ts`, then verified with focused desktop Vitest runs, `npm run build`, and `npm run desktop:web:build`.
+
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 
 - **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.

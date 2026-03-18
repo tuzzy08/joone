@@ -12,7 +12,7 @@
   "scripts": {
     "build": "tsc",
     "desktop:runtime:dev": "tsx src/desktop/devServer.ts",
-    "desktop:web:dev": "npx vite --config desktop/vite.config.ts --host 0.0.0.0 --port 1420",
+    "desktop:web:dev": "tsx src/desktop/webDev.ts",
     "desktop:web:build": "npx vite build --config desktop/vite.config.ts",
     "desktop:dev": "npx @tauri-apps/cli dev --config src-tauri/tauri.conf.json",
     "desktop:build": "npx @tauri-apps/cli build --config src-tauri/tauri.conf.json",
