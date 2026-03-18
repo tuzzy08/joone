@@ -553,12 +553,14 @@ program
     console.log(chalk.dim("  ─────────────────────────────────────────────────────────"));
     
     for (const session of sessions) {
-      const date = new Date(session.lastSavedAt).toLocaleString();
+      const date = session.lastSavedAt
+        ? new Date(session.lastSavedAt).toLocaleString()
+        : "Not saved yet";
       console.log(
         `  ${chalk.cyan(session.sessionId)} ` + 
         chalk.dim(`[${date}] `) + 
         chalk.grey(`(${session.model})\n`) +
-        `    ↳ ${chalk.white(session.description)}\n`
+        `    ↳ ${chalk.white(session.description ?? "Empty session")}\n`
       );
     }
   });

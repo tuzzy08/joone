@@ -28,6 +28,8 @@ export interface RuntimeSessionSnapshot {
   state: ContextState;
   messages: RuntimeMessage[];
   metrics: RuntimeMetrics;
+  lastSavedAt?: number;
+  description?: string;
 }
 
 export interface RuntimePreparedSession {

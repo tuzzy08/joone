@@ -58,15 +58,17 @@ export function App() {
 
   const startSession = async () => {
     const session = await bridge.startSession();
-    setActiveSession(session);
-    setSessions((prev) => upsertSession(prev, session));
+    const normalized = normalizeSession(session);
+    setActiveSession(normalized);
+    setSessions((prev) => upsertSession(prev, normalized));
     setStatus("Idle");
   };
 
   const resumeSession = async (sessionId: string) => {
     const session = await bridge.resumeSession(sessionId);
-    setActiveSession(session);
-    setSessions((prev) => upsertSession(prev, session));
+    const normalized = normalizeSession(session);
+    setActiveSession(normalized);
+    setSessions((prev) => upsertSession(prev, normalized));
     setStatus("Idle");
   };
 
@@ -77,13 +79,15 @@ export function App() {
 
     const session = activeSession ?? (await bridge.startSession());
     if (!activeSession) {
-      setActiveSession(session);
-      setSessions((prev) => upsertSession(prev, session));
+      const normalized = normalizeSession(session);
+      setActiveSession(normalized);
+      setSessions((prev) => upsertSession(prev, normalized));
     }
 
     const next = await bridge.submitMessage(session.sessionId, input.trim());
-    setActiveSession(next);
-    setSessions((prev) => upsertSession(prev, next));
+    const normalized = normalizeSession(next);
+    setActiveSession(normalized);
+    setSessions((prev) => upsertSession(prev, normalized));
     setInput("");
     setStatus("Thinking");
   };
@@ -120,7 +124,7 @@ export function App() {
                   onClick={() => void resumeSession(session.sessionId)}
                 >
                   <strong>{session.sessionId}</strong>
-                  <span>{session.messages.at(0)?.content ?? "Empty session"}</span>
+                  <span>{session.messages[0]?.content ?? "Empty session"}</span>
                 </button>
               ))
             )}
@@ -207,7 +211,7 @@ async function hydrateShell(
 
   setConfig(config);
   setBridgeStatus(bridgeStatus);
-  setSessions(sessions);
+  setSessions(sessions.map((session) => normalizeSession(session)));
   setActivity([
     `Desktop shell ready via ${bridgeStatus.mode} bridge (${bridgeStatus.backend}).`,
   ]);
@@ -219,6 +223,20 @@ function upsertSession(
 ) {
   const filtered = sessions.filter((session) => session.sessionId !== next.sessionId);
   return [next, ...filtered];
+}
+
+function normalizeSession(session: DesktopSessionSnapshot): DesktopSessionSnapshot {
+  return {
+    ...session,
+    messages: Array.isArray(session.messages) ? session.messages : [],
+    metrics: session.metrics ?? {
+      totalTokens: 0,
+      cacheHitRate: 0,
+      toolCallCount: 0,
+      turnCount: 0,
+      totalCost: 0,
+    },
+  };
 }
 
 function describeEvent(event: DesktopEvent): string {

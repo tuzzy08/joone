@@ -105,6 +105,27 @@ describe("JooneRuntimeService", () => {
     expect(resumed.state.conversationHistory.at(-1)).toBeInstanceOf(HumanMessage);
   });
 
+  it("lists persisted sessions as normalized snapshots for desktop clients", async () => {
+    const service = new JooneRuntimeService({
+      configPath,
+      cwd: tempRoot,
+      harnessFactory: makeHarnessFactory(),
+    });
+
+    const started = await service.startSession();
+    await service.submitMessage(started.sessionId, "persisted desktop preview");
+    await service.closeSession(started.sessionId);
+
+    const sessions = await service.listSessions();
+
+    const listed = sessions.find((session) => session.sessionId === started.sessionId);
+
+    expect(listed?.sessionId).toBe(started.sessionId);
+    expect(Array.isArray(listed?.messages)).toBe(true);
+    expect(listed?.messages.length).toBeGreaterThan(0);
+    expect(listed?.metrics.totalTokens).toBeTypeOf("number");
+  });
+
   it("cleans up runtime resources when a session closes", async () => {
     let destroyed = 0;
     const service = new JooneRuntimeService({

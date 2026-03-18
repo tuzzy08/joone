@@ -272,3 +272,16 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopRuntimeServer.test.ts tests/desktop/desktopDevWorkflow.test.ts tests/desktop/desktopHttpBridge.test.ts tests/desktop/desktopBridgeStatus.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 9 - Desktop Session Snapshot Hardening
+
+- Fixed a desktop UI crash where the session sidebar assumed every runtime session had a `messages` array and called `.at(0)` on `undefined`.
+- Corrected the shared runtime contract in `src/runtime/service.ts` so `listSessions()` now returns full `RuntimeSessionSnapshot[]` built from persisted session payloads instead of raw `SessionHeader[]`.
+- Preserved CLI compatibility by carrying saved-session metadata (`lastSavedAt`, `description`) alongside the richer runtime snapshot type in `src/runtime/types.ts`.
+- Hardened `desktop/src/App.tsx` so incoming sessions are normalized before rendering, which prevents older or partial payloads from crashing the shell even if they are incomplete.
+- Updated `src/cli/index.ts` so `joone sessions` gracefully handles unsaved in-memory sessions with fallback display text instead of assuming persistence metadata always exists.
+- Added the failing coverage first in `tests/runtime/runtimeService.test.ts`, then implemented the runtime mapping fix and UI hardening.
+- Verification completed:
+  - `npm test -- tests/runtime/runtimeService.test.ts tests/desktop/desktopRuntimeServer.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

@@ -4,7 +4,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { loadConfig, saveConfig, type JooneConfig } from "../cli/config.js";
 import type { ContextState } from "../core/promptBuilder.js";
 import { SessionResumer } from "../core/sessionResumer.js";
-import { SessionStore } from "../core/sessionStore.js";
+import { SessionStore, type SessionHeader } from "../core/sessionStore.js";
 import {
   HITLBridge,
   type HITLPermissionRequest,
@@ -82,8 +82,9 @@ export class JooneRuntimeService {
     saveConfig(this.configPath, config);
   }
 
-  async listSessions() {
-    return this.sessionStore.listSessions();
+  async listSessions(): Promise<RuntimeSessionSnapshot[]> {
+    const headers = await this.sessionStore.listSessions();
+    return Promise.all(headers.map((header) => this.buildPersistedSnapshot(header)));
   }
 
   async prepareSession(options?: {
@@ -355,6 +356,7 @@ IMPORTANT CAPABILITIES:
       model: record.config.model,
       state: record.state,
       messages: serializeMessages(record.state.conversationHistory),
+      description: describeConversation(record.state),
       metrics:
         record.harness?.tracerSummary ?? {
           totalTokens: 0,
@@ -363,6 +365,22 @@ IMPORTANT CAPABILITIES:
           turnCount: 0,
           totalCost: 0,
         },
+    };
+  }
+
+  private async buildPersistedSnapshot(
+    header: SessionHeader,
+  ): Promise<RuntimeSessionSnapshot> {
+    const payload = await this.sessionStore.loadSession(header.sessionId);
+    return {
+      sessionId: header.sessionId,
+      provider: header.provider,
+      model: header.model,
+      state: payload.state,
+      messages: serializeMessages(payload.state.conversationHistory),
+      lastSavedAt: header.lastSavedAt,
+      description: header.description,
+      metrics: emptyRuntimeMetrics(),
     };
   }
 
@@ -383,6 +401,23 @@ IMPORTANT CAPABILITIES:
     }
     return record;
   }
+}
+
+function emptyRuntimeMetrics(): RuntimeMetrics {
+  return {
+    totalTokens: 0,
+    cacheHitRate: 0,
+    toolCallCount: 0,
+    turnCount: 0,
+    totalCost: 0,
+  };
+}
+
+function describeConversation(state: ContextState): string {
+  const firstUserMessage = serializeMessages(state.conversationHistory).find(
+    (message) => message.role === "user",
+  );
+  return firstUserMessage?.content ?? "Empty session";
 }
 
 function serializeMessages(messages: ContextState["conversationHistory"]): RuntimeMessage[] {
