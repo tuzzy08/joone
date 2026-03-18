@@ -99,6 +99,13 @@ graph TD
 
 - Intended production architecture
 - The desktop shell uses `@tauri-apps/api` to call native commands and subscribe to emitted events
+- Current native coverage:
+  - startup status/config
+  - saved session listing
+  - session start/resume
+  - message submission
+  - live session event subscription via native Tauri events relayed from the runtime SSE stream
+- Remaining HTTP-backed Tauri paths are now limited to the small set of lifecycle actions that have not migrated yet, such as `closeSession()` and `saveConfig()`
 - This will replace the browser fallback as the primary desktop runtime path once Milestone 20 is complete
 
 ## Hybrid Sandbox Model
@@ -178,7 +185,8 @@ This event model is the architectural seam that allows the same runtime to power
 - desktop shell exists
 - HTTP runtime-backed dev mode exists
 - browser fallback exists for UI-only work
-- Tauri production command/event wiring is still incomplete
+- Tauri production command/event wiring now covers startup, session lifecycle, message submission, and live runtime event subscription
+- Tauri still has a small amount of transitional HTTP-backed behavior for unmigrated lifecycle/config actions
 
 ### End state for Milestone 20
 

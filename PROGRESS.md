@@ -375,3 +375,29 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run desktop:web:build`
 - Native verification note:
   - `cargo check --manifest-path src-tauri/Cargo.toml` was attempted multiple times, including `-j 1`, but currently fails with Windows file-lock errors inside `src-tauri/target/debug/deps` while removing intermediate `.rcgu.o` files. The failure appears environmental/toolchain-related rather than a surfaced Rust source error.
+
+### 2026-03-18: Milestone 20 Slice 16 - Tauri Native Event Streaming and Build Scaffold Repair
+
+- Moved the active conversation subscription path off the Tauri frontend HTTP bridge.
+- Updated `desktop/src/bridge/tauriBridge.ts` so `subscribe(sessionId, listener)` now:
+  - registers a native Tauri event listener on `runtime-event:{sessionId}`
+  - invokes `runtime_subscribe_session`
+  - invokes `runtime_unsubscribe_session` during cleanup
+- Expanded `src-tauri/src/main.rs` with:
+  - `RuntimeSubscriptionState` to track active session subscriptions
+  - `runtime_subscribe_session` and `runtime_unsubscribe_session` commands
+  - a Rust-side SSE relay that reads `/sessions/{sessionId}/events` from the runtime URL and re-emits each payload into Tauri via `app.emit(...)`
+  - a native `session:error` emission path when the runtime event stream fails
+- Repaired the Tauri crate scaffold so native verification works reliably:
+  - added `src-tauri/build.rs`
+  - wired `build = "build.rs"` in `src-tauri/Cargo.toml`
+  - added a minimal valid Windows icon at `src-tauri/icons/icon.ico`
+- Extended `tests/desktop/tauriRuntimeBridge.test.ts` to lock in the native event subscription path and updated `tests/desktop/desktopScaffold.test.ts` to require the Tauri build script and icon scaffold.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/desktopScaffold.test.ts`
+  - `npm test -- tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm test`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`

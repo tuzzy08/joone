@@ -2,9 +2,13 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use std::sync::{mpsc, Mutex};
 use std::time::Duration;
+use tauri::{AppHandle, Emitter, State};
 
 #[derive(Serialize)]
 struct DesktopBridgeStatus {
@@ -67,9 +71,14 @@ struct PersistedSessionSnapshot {
     last_saved_at: u64,
 }
 
+#[derive(Default)]
+struct RuntimeSubscriptionState {
+    subscriptions: Mutex<HashMap<String, mpsc::Sender<()>>>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ResumeSessionArgs {
+struct SessionIdArgs {
     session_id: String,
 }
 
@@ -170,7 +179,7 @@ fn runtime_start_session() -> Result<DesktopSessionSnapshot, String> {
 }
 
 #[tauri::command]
-fn runtime_resume_session(args: ResumeSessionArgs) -> Result<DesktopSessionSnapshot, String> {
+fn runtime_resume_session(args: SessionIdArgs) -> Result<DesktopSessionSnapshot, String> {
     runtime_post(&format!("/sessions/{}/resume", args.session_id))
 }
 
@@ -180,6 +189,39 @@ fn runtime_submit_message(args: SubmitMessageArgs) -> Result<DesktopSessionSnaps
         &format!("/sessions/{}/messages", args.session_id),
         serde_json::json!({ "text": args.text }),
     )
+}
+
+#[tauri::command]
+fn runtime_subscribe_session(
+    app: AppHandle,
+    state: State<RuntimeSubscriptionState>,
+    args: SessionIdArgs,
+) -> Result<(), String> {
+    unsubscribe_session(&state, &args.session_id);
+
+    let (stop_tx, stop_rx) = mpsc::channel();
+    state
+        .subscriptions
+        .lock()
+        .map_err(|error| error.to_string())?
+        .insert(args.session_id.clone(), stop_tx);
+
+    let session_id = args.session_id.clone();
+    let base_url = runtime_base_url();
+    std::thread::spawn(move || {
+        stream_runtime_events(app, &base_url, &session_id, stop_rx);
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+fn runtime_unsubscribe_session(
+    state: State<RuntimeSubscriptionState>,
+    args: SessionIdArgs,
+) -> Result<(), String> {
+    unsubscribe_session(&state, &args.session_id);
+    Ok(())
 }
 
 fn joone_config_path() -> Option<PathBuf> {
@@ -233,6 +275,62 @@ fn read_session_snapshot(path: &PathBuf) -> Option<PersistedSessionSnapshot> {
     })
 }
 
+fn stream_runtime_events(
+    app: AppHandle,
+    base_url: &str,
+    session_id: &str,
+    stop_rx: mpsc::Receiver<()>,
+) {
+    let client = match reqwest::blocking::Client::builder().build() {
+        Ok(client) => client,
+        Err(error) => {
+            emit_runtime_error(&app, session_id, error.to_string());
+            return;
+        }
+    };
+
+    let response = match client
+        .get(format!("{base_url}/sessions/{session_id}/events"))
+        .send()
+    {
+        Ok(response) => response,
+        Err(error) => {
+            emit_runtime_error(&app, session_id, error.to_string());
+            return;
+        }
+    };
+
+    let reader = BufReader::new(response);
+    for line in reader.lines() {
+        if stop_rx.try_recv().is_ok() {
+            break;
+        }
+
+        let Ok(line) = line else {
+            break;
+        };
+
+        let Some(payload) = line.strip_prefix("data: ") else {
+            continue;
+        };
+
+        if let Ok(parsed) = serde_json::from_str::<Value>(payload) {
+            let _ = app.emit(&format!("runtime-event:{session_id}"), parsed);
+        }
+    }
+}
+
+fn emit_runtime_error(app: &AppHandle, session_id: &str, message: String) {
+    let _ = app.emit(
+        &format!("runtime-event:{session_id}"),
+        serde_json::json!({
+            "type": "session:error",
+            "sessionId": session_id,
+            "message": message,
+        }),
+    );
+}
+
 fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
     runtime_post_with_body(path, serde_json::json!({}))
 }
@@ -260,8 +358,17 @@ fn runtime_post_with_body(
     response.json::<DesktopSessionSnapshot>().map_err(|error| error.to_string())
 }
 
+fn unsubscribe_session(state: &State<RuntimeSubscriptionState>, session_id: &str) {
+    if let Ok(mut subscriptions) = state.subscriptions.lock() {
+        if let Some(stop_tx) = subscriptions.remove(session_id) {
+            let _ = stop_tx.send(());
+        }
+    }
+}
+
 fn main() {
     tauri::Builder::default()
+        .manage(RuntimeSubscriptionState::default())
         .invoke_handler(tauri::generate_handler![
             runtime_base_url,
             runtime_status,
@@ -269,7 +376,9 @@ fn main() {
             runtime_list_sessions,
             runtime_start_session,
             runtime_resume_session,
-            runtime_submit_message
+            runtime_submit_message,
+            runtime_subscribe_session,
+            runtime_unsubscribe_session
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Joone Desktop");

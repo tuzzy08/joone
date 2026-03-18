@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { createHttpDesktopBridge } from "./httpBridge";
 import type {
   DesktopBridge,
   DesktopBridgeStatus,
   DesktopConfig,
+  DesktopEvent,
   DesktopSessionSnapshot,
 } from "./types";
 
@@ -60,16 +62,35 @@ export function createTauriDesktopBridge(): DesktopBridge {
     subscribe(sessionId, listener) {
       let activeUnsubscribe: (() => void) | undefined;
       let cancelled = false;
+      let subscribed = false;
 
-      void getBridge().then((bridge) => {
+      // Tauri mode receives runtime SSE traffic via native events instead of
+      // exposing the HTTP stream directly to the frontend.
+      void listen(`runtime-event:${sessionId}`, (event) => {
+        listener(event.payload as DesktopEvent);
+      }).then((unlisten) => {
         if (cancelled) {
+          unlisten();
           return;
         }
-        activeUnsubscribe = bridge.subscribe(sessionId, listener);
+        activeUnsubscribe = unlisten;
+      });
+
+      void invoke("runtime_subscribe_session", {
+        sessionId,
+      }).then(() => {
+        if (cancelled) {
+          void invoke("runtime_unsubscribe_session", { sessionId });
+          return;
+        }
+        subscribed = true;
       });
 
       return () => {
         cancelled = true;
+        if (subscribed) {
+          void invoke("runtime_unsubscribe_session", { sessionId });
+        }
         activeUnsubscribe?.();
       };
     },

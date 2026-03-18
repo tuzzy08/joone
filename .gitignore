@@ -10,3 +10,4 @@ coverage/
 vitest_output.txt
 deep_agents_docs/
 src-tauri/target/
+src-tauri/gen/

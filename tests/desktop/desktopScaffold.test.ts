@@ -13,7 +13,17 @@ describe("Desktop scaffold", () => {
   it("creates a Tauri backend scaffold", () => {
     expect(fs.existsSync(path.resolve("src-tauri/tauri.conf.json"))).toBe(true);
     expect(fs.existsSync(path.resolve("src-tauri/Cargo.toml"))).toBe(true);
+    expect(fs.existsSync(path.resolve("src-tauri/build.rs"))).toBe(true);
+    expect(fs.existsSync(path.resolve("src-tauri/icons/icon.ico"))).toBe(true);
     expect(fs.existsSync(path.resolve("src-tauri/src/main.rs"))).toBe(true);
+  });
+
+  it("wires the Tauri build script required by generate_context", () => {
+    const cargoToml = fs.readFileSync(path.resolve("src-tauri/Cargo.toml"), "utf8");
+    const buildRs = fs.readFileSync(path.resolve("src-tauri/build.rs"), "utf8");
+
+    expect(cargoToml).toContain('build = "build.rs"');
+    expect(buildRs).toContain("tauri_build::build()");
   });
 
   it("creates a desktop React app scaffold", () => {

@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 describe("Tauri runtime bridge", () => {
-  it("moves startup status, config, saved sessions, and active session actions onto real Tauri commands", () => {
+  it("moves startup status, config, session actions, and event subscription onto real Tauri commands", () => {
     const source = fs.readFileSync(
       path.resolve("desktop/src/bridge/tauriBridge.ts"),
       "utf8",
@@ -23,6 +23,9 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain(
       'invoke<DesktopSessionSnapshot>("runtime_submit_message"',
     );
+    expect(source).toContain('listen(`runtime-event:${sessionId}`');
+    expect(source).toContain('invoke("runtime_subscribe_session"');
+    expect(source).toContain('invoke("runtime_unsubscribe_session"');
     expect(source).toContain('invoke<string>("runtime_base_url")');
     expect(source).toContain("createHttpDesktopBridge");
     expect(source).not.toContain("return (await getBridge()).loadConfig()");
@@ -30,9 +33,10 @@ describe("Tauri runtime bridge", () => {
     expect(source).not.toContain("return (await getBridge()).startSession()");
     expect(source).not.toContain("return (await getBridge()).resumeSession(sessionId)");
     expect(source).not.toContain("return (await getBridge()).submitMessage(sessionId, text)");
+    expect(source).not.toContain("activeUnsubscribe = bridge.subscribe(sessionId, listener)");
   });
 
-  it("registers startup, session-list, and active session commands in the Tauri shell", () => {
+  it("registers startup, session-list, active session, and event bridge commands in the Tauri shell", () => {
     const source = fs.readFileSync(
       path.resolve("src-tauri/src/main.rs"),
       "utf8",
@@ -45,6 +49,9 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("runtime_start_session");
     expect(source).toContain("runtime_resume_session");
     expect(source).toContain("runtime_submit_message");
+    expect(source).toContain("runtime_subscribe_session");
+    expect(source).toContain("runtime_unsubscribe_session");
+    expect(source).toContain("runtime-event:");
     expect(source).toContain("generate_handler");
     expect(source).toContain("JOONE_DESKTOP_RUNTIME_URL");
   });

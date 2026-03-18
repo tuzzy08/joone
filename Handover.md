@@ -73,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **126 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, desktop bridge status coverage, npm CLI launcher coverage, desktop runtime CORS coverage, the new desktop UI shell tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
+All development follows strict TDD. Currently, **180 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, desktop bridge status coverage, npm CLI launcher coverage, desktop runtime CORS coverage, the desktop UI shell and error-recovery suites, the native Tauri bridge scaffolding/streaming tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly, and `cargo check --manifest-path src-tauri/Cargo.toml` is now green when run with a temporary `CARGO_TARGET_DIR`.
 
 ### Completed Milestones
 
@@ -137,6 +137,8 @@ All development follows strict TDD. Currently, **126 tests are GREEN**, includin
 - The thirteenth M20 slice moves Tauri saved-session listing off the HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls `runtime_list_sessions`, and `src-tauri/src/main.rs` reads `~/.joone/sessions/*.jsonl` directly to build desktop snapshots sorted by recency. Session start/resume/message execution still remain on the HTTP bridge in Tauri mode.
 - The fourteenth M20 slice moves Tauri session start and resume off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_start_session` and `runtime_resume_session` commands, while `src-tauri/src/main.rs` proxies those lifecycle requests through the runtime URL and deserializes full desktop session snapshots in Rust.
 - The fifteenth M20 slice moves Tauri message submission off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_submit_message`, and `src-tauri/src/main.rs` proxies `{ sessionId, text }` through the runtime URL and deserializes the updated session snapshot response in Rust. At this point, Tauri mode still depends on the HTTP bridge mainly for live event streaming and `closeSession()`.
+- The sixteenth M20 slice moves Tauri live event subscription off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now subscribes via native `listen("runtime-event:{sessionId}")` plus `runtime_subscribe_session` / `runtime_unsubscribe_session`, while `src-tauri/src/main.rs` relays runtime SSE events into native Tauri events and emits `session:error` payloads when the stream fails.
+- The Tauri crate scaffold is also now complete enough for local Rust verification: `src-tauri/build.rs` is wired through `Cargo.toml`, and `src-tauri/icons/icon.ico` exists so `tauri::generate_context!()` and Windows resource generation succeed under `cargo check`.
 
 ### Tool Routing Summary
 
@@ -156,5 +158,6 @@ All development follows strict TDD. Currently, **126 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
+2.  **Next slice:** move `closeSession()` off the Tauri HTTP bridge path, then finish the remaining native desktop lifecycle/config editing work so Tauri mode no longer depends on HTTP for active conversations.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._
