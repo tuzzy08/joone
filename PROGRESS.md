@@ -60,6 +60,13 @@ _This document serves as a living changelog and status board. Any human or agent
 - **Tooling**: Added the missing frontend packages (`vite`, `@vitejs/plugin-react`, `react-dom`, `@tauri-apps/api`) so the desktop web build is no longer just a placeholder script.
 - **Verification**: Added `tests/desktop/desktopUiShell.test.ts`, ran the focused desktop/runtime Vitest suite, `npm run build`, and confirmed `npm run desktop:web:build` succeeds.
 
+### 2026-03-18: Milestone 20 Slice 3 - Runtime-Backed Desktop Dev Server (COMPLETE)
+
+- **Desktop Runtime Server**: Added `src/desktop/server.ts`, an Express-backed HTTP/SSE server that exposes shared-runtime routes for config, sessions, message submission, and streamed desktop events.
+- **Local Dev Entry**: Added `src/desktop/devServer.ts` plus `npm run desktop:runtime:dev` so the desktop shell can be pointed at a real Node runtime during local development.
+- **HTTP Bridge**: Added `desktop/src/bridge/httpBridge.ts` and updated bridge selection to prefer `VITE_JOONE_DESKTOP_API_URL` before falling back to the browser mock bridge.
+- **Verification**: Added `tests/desktop/desktopRuntimeServer.test.ts` and `tests/desktop/desktopHttpBridge.test.ts`, then verified with focused Vitest runs, `npm run build`, and `npm run desktop:web:build`.
+
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 
 - **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.
