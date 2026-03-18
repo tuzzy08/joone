@@ -318,3 +318,16 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 12 - Desktop Error Toasts and Retry Actions
+
+- Added toast-style desktop recovery UI for failed startup/session/message actions in `desktop/src/App.tsx`.
+- Introduced a `retryActionRef`-backed retry path so the shell can replay the last failed action directly from the UI instead of forcing a browser refresh.
+- Added `Retry last action` and `Dismiss` controls, and styled them via `desktop/src/styles.css` as a floating toast stack so failures are visible without hiding the rest of the desktop shell.
+- This recovery layer now complements the earlier `DesktopErrorBoundary`: render-time crashes still fall back to the boundary, while async bridge/runtime failures stay inside the normal app shell with a retry affordance.
+- Added `tests/desktop/desktopErrorRecovery.test.ts` first, then implemented the minimal toast/retry flow to satisfy the red-green cycle.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopErrorRecovery.test.ts`
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getDesktopBridge } from "./bridge";
 import type {
   DesktopBridge,
@@ -22,16 +22,14 @@ export function App() {
   const [activity, setActivity] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
+  const retryActionRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        await hydrateShell(bridge, setConfig, setBridgeStatus, setSessions, setActivity);
-        setLastError(null);
-      } catch (error) {
-        reportError(error, "Failed to initialize desktop shell");
-      }
-    })();
+    void runAction(
+      () =>
+        hydrateShell(bridge, setConfig, setBridgeStatus, setSessions, setActivity),
+      "Failed to initialize desktop shell",
+    );
   }, [bridge]);
 
   useEffect(() => {
@@ -69,29 +67,23 @@ export function App() {
   }, [activeSession, bridge]);
 
   const startSession = async () => {
-    try {
+    await runAction(async () => {
       const session = await bridge.startSession();
       const normalized = normalizeSession(session);
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
-      setLastError(null);
       setStatus("Idle");
-    } catch (error) {
-      reportError(error, "Failed to start session");
-    }
+    }, "Failed to start session");
   };
 
   const resumeSession = async (sessionId: string) => {
-    try {
+    await runAction(async () => {
       const session = await bridge.resumeSession(sessionId);
       const normalized = normalizeSession(session);
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
-      setLastError(null);
       setStatus("Idle");
-    } catch (error) {
-      reportError(error, `Failed to resume ${sessionId}`);
-    }
+    }, `Failed to resume ${sessionId}`);
   };
 
   const submit = async () => {
@@ -99,7 +91,7 @@ export function App() {
       return;
     }
 
-    try {
+    await runAction(async () => {
       const session = activeSession ?? (await bridge.startSession());
       if (!activeSession) {
         const normalized = normalizeSession(session);
@@ -112,12 +104,35 @@ export function App() {
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
       setInput("");
-      setLastError(null);
       setStatus("Thinking");
-    } catch (error) {
-      reportError(error, "Failed to send message");
-    }
+    }, "Failed to send message");
   };
+
+  async function runAction(action: () => Promise<void>, context: string) {
+    retryActionRef.current = action;
+    try {
+      await action();
+      retryActionRef.current = null;
+      setLastError(null);
+    } catch (error) {
+      reportError(error, context);
+    }
+  }
+
+  async function retryLastAction() {
+    const retry = retryActionRef.current;
+    if (!retry) {
+      return;
+    }
+
+    await runAction(retry, "Retry last action");
+  }
+
+  function dismissError() {
+    retryActionRef.current = null;
+    setLastError(null);
+    setStatus((current) => (current === "Error" ? "Idle" : current));
+  }
 
   function reportError(error: unknown, context: string) {
     const message = error instanceof Error ? error.message : String(error);
@@ -129,6 +144,22 @@ export function App() {
 
   return (
     <div className="shell">
+      {lastError ? (
+        <div className="toast-stack">
+          <section className="toast" role="alert">
+            <strong>Desktop error</strong>
+            <p>{lastError}</p>
+            <div className="toast-actions">
+              <button className="button" onClick={() => void retryLastAction()}>
+                Retry last action
+              </button>
+              <button className="ghost-button" onClick={() => dismissError()}>
+                Dismiss
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <aside className="sidebar">
         <section className="panel">
           <h2>Workspace</h2>
