@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -145,6 +145,41 @@ fn runtime_load_config() -> DesktopConfig {
     }
 
     config
+}
+
+#[tauri::command]
+fn runtime_save_config(config: DesktopConfig) -> Result<(), String> {
+    let Some(config_path) = joone_config_path() else {
+        return Err("Unable to resolve Joone config path".to_string());
+    };
+
+    let mut document = match fs::read_to_string(&config_path) {
+        Ok(raw) => serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| Value::Object(Map::new())),
+        Err(_) => Value::Object(Map::new()),
+    };
+
+    if !document.is_object() {
+        document = Value::Object(Map::new());
+    }
+
+    let Some(parent) = config_path.parent() else {
+        return Err("Unable to resolve Joone config directory".to_string());
+    };
+
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+
+    let Value::Object(ref mut object) = document else {
+        return Err("Unable to prepare Joone config document".to_string());
+    };
+
+    object.insert("provider".to_string(), Value::String(config.provider));
+    object.insert("model".to_string(), Value::String(config.model));
+    object.insert("streaming".to_string(), Value::Bool(config.streaming));
+
+    let serialized = serde_json::to_string_pretty(&document).map_err(|error| error.to_string())?;
+    fs::write(config_path, serialized).map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -401,6 +436,7 @@ fn main() {
             runtime_base_url,
             runtime_status,
             runtime_load_config,
+            runtime_save_config,
             runtime_list_sessions,
             runtime_start_session,
             runtime_resume_session,

@@ -11,6 +11,7 @@ describe("Tauri runtime bridge", () => {
 
     expect(source).toContain('invoke<DesktopBridgeStatus>("runtime_status")');
     expect(source).toContain('invoke<DesktopConfig>("runtime_load_config")');
+    expect(source).toContain('invoke("runtime_save_config"');
     expect(source).toContain(
       'invoke<DesktopSessionSnapshot[]>("runtime_list_sessions")',
     );
@@ -27,14 +28,13 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain('listen(`runtime-event:${sessionId}`');
     expect(source).toContain('invoke("runtime_subscribe_session"');
     expect(source).toContain('invoke("runtime_unsubscribe_session"');
-    expect(source).toContain('invoke<string>("runtime_base_url")');
-    expect(source).toContain("createHttpDesktopBridge");
     expect(source).not.toContain("return (await getBridge()).loadConfig()");
     expect(source).not.toContain("return (await getBridge()).listSessions()");
     expect(source).not.toContain("return (await getBridge()).startSession()");
     expect(source).not.toContain("return (await getBridge()).resumeSession(sessionId)");
     expect(source).not.toContain("return (await getBridge()).submitMessage(sessionId, text)");
     expect(source).not.toContain("await (await getBridge()).closeSession(sessionId)");
+    expect(source).not.toContain("await (await getBridge()).saveConfig(config)");
     expect(source).not.toContain("activeUnsubscribe = bridge.subscribe(sessionId, listener)");
   });
 
@@ -47,6 +47,7 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("runtime_base_url");
     expect(source).toContain("runtime_status");
     expect(source).toContain("runtime_load_config");
+    expect(source).toContain("runtime_save_config");
     expect(source).toContain("runtime_list_sessions");
     expect(source).toContain("runtime_start_session");
     expect(source).toContain("runtime_resume_session");

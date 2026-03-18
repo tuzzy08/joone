@@ -421,3 +421,21 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-18: Milestone 20 Slice 18 - Tauri Native Config Save
+
+- Moved `saveConfig()` off the Tauri frontend HTTP bridge path.
+- Updated `desktop/src/bridge/tauriBridge.ts` so `saveConfig(config)` now calls `invoke("runtime_save_config", { config })` directly, and removed the now-unused HTTP bridge fallback from the Tauri frontend adapter.
+- Expanded `src-tauri/src/main.rs` with `runtime_save_config`, which:
+  - loads the existing `~/.joone/config.json` when present
+  - preserves unrelated config fields
+  - updates the desktop-owned `provider`, `model`, and `streaming` keys
+  - creates the config directory/file when it does not exist yet
+- This means the Tauri desktop frontend no longer depends on the HTTP bridge at all; the runtime URL is now fully hidden behind native Rust commands/events in Tauri mode.
+- Extended `tests/desktop/tauriRuntimeBridge.test.ts` first to require the native config-save command and to assert that the old HTTP fallback path is gone.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts tests/desktop/desktopRuntimeServer.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
