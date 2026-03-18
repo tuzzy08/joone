@@ -49,7 +49,10 @@ export function createTauriDesktopBridge(): DesktopBridge {
       });
     },
     async submitMessage(sessionId, text) {
-      return (await getBridge()).submitMessage(sessionId, text);
+      return invoke<DesktopSessionSnapshot>("runtime_submit_message", {
+        sessionId,
+        text,
+      });
     },
     async closeSession(sessionId) {
       await (await getBridge()).closeSession(sessionId);

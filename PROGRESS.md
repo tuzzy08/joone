@@ -361,3 +361,17 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 15 - Tauri Native Message Submission
+
+- Moved `submitMessage()` off the Tauri frontend HTTP bridge path.
+- Updated `desktop/src/bridge/tauriBridge.ts` so `submitMessage(sessionId, text)` now calls `invoke<DesktopSessionSnapshot>("runtime_submit_message", { sessionId, text })`.
+- Added `runtime_submit_message` in `src-tauri/src/main.rs`, plus the minimum typed Rust payload needed to proxy `{ sessionId, text }` to the runtime URL and deserialize the updated desktop session snapshot response.
+- Refactored the Rust-side runtime proxy helper to support both empty-body and JSON-body POST requests so the same path can be reused for later native Tauri commands.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+- Native verification note:
+  - `cargo check --manifest-path src-tauri/Cargo.toml` was attempted multiple times, including `-j 1`, but currently fails with Windows file-lock errors inside `src-tauri/target/debug/deps` while removing intermediate `.rcgu.o` files. The failure appears environmental/toolchain-related rather than a surfaced Rust source error.

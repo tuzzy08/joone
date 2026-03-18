@@ -73,6 +73,13 @@ struct ResumeSessionArgs {
     session_id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SubmitMessageArgs {
+    session_id: String,
+    text: String,
+}
+
 #[tauri::command]
 fn runtime_base_url() -> String {
     std::env::var("JOONE_DESKTOP_RUNTIME_URL")
@@ -167,6 +174,14 @@ fn runtime_resume_session(args: ResumeSessionArgs) -> Result<DesktopSessionSnaps
     runtime_post(&format!("/sessions/{}/resume", args.session_id))
 }
 
+#[tauri::command]
+fn runtime_submit_message(args: SubmitMessageArgs) -> Result<DesktopSessionSnapshot, String> {
+    runtime_post_with_body(
+        &format!("/sessions/{}/messages", args.session_id),
+        serde_json::json!({ "text": args.text }),
+    )
+}
+
 fn joone_config_path() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
     Some(PathBuf::from(home).join(".joone").join("config.json"))
@@ -219,6 +234,13 @@ fn read_session_snapshot(path: &PathBuf) -> Option<PersistedSessionSnapshot> {
 }
 
 fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
+    runtime_post_with_body(path, serde_json::json!({}))
+}
+
+fn runtime_post_with_body(
+    path: &str,
+    body: serde_json::Value,
+) -> Result<DesktopSessionSnapshot, String> {
     let base_url = runtime_base_url();
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -227,7 +249,7 @@ fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
 
     let response = client
         .post(format!("{base_url}{path}"))
-        .json(&serde_json::json!({}))
+        .json(&body)
         .send()
         .map_err(|error| error.to_string())?;
 
@@ -246,7 +268,8 @@ fn main() {
             runtime_load_config,
             runtime_list_sessions,
             runtime_start_session,
-            runtime_resume_session
+            runtime_resume_session,
+            runtime_submit_message
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Joone Desktop");
