@@ -79,6 +79,12 @@ _This document serves as a living changelog and status board. Any human or agent
 - **Backend-First Dev Mode**: The launcher injects `VITE_JOONE_DESKTOP_API_URL=http://127.0.0.1:3011`, so local desktop frontend work now prefers the real runtime-backed HTTP bridge over the browser mock by default.
 - **Verification**: Added `tests/desktop/desktopDevWorkflow.test.ts`, then verified with focused desktop Vitest runs, `npm run build`, and `npm run desktop:web:build`.
 
+### 2026-03-18: Milestone 20 Slice 5 - Tauri Runtime Bootstrap (COMPLETE)
+
+- **Tauri Bridge Correction**: Replaced the placeholder Tauri bridge calls to non-existent `runtime_*` commands with a real bootstrap flow that resolves a runtime base URL via `invoke("runtime_base_url")` and then delegates to the HTTP bridge.
+- **Rust Command Hook**: Added `runtime_base_url` in `src-tauri/src/main.rs` and registered it with `tauri::generate_handler!`, defaulting to `http://127.0.0.1:3011` unless `JOONE_DESKTOP_RUNTIME_URL` is set.
+- **Verification**: Added `tests/desktop/tauriRuntimeBridge.test.ts`, then verified with focused desktop Vitest runs, `npm run build`, and `npm run desktop:web:build`.
+
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 
 - **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.
