@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { createHttpDesktopBridge } from "./httpBridge";
-import type { DesktopBridge, DesktopBridgeStatus } from "./types";
+import type { DesktopBridge, DesktopBridgeStatus, DesktopConfig } from "./types";
 
 export function createTauriDesktopBridge(): DesktopBridge {
   let bridgePromise: Promise<DesktopBridge> | undefined;
@@ -24,17 +24,10 @@ export function createTauriDesktopBridge(): DesktopBridge {
 
   return {
     async getStatus() {
-      const baseUrl = await getBaseUrl();
-      const status = await (await getBridge()).getStatus();
-      return {
-        ...status,
-        mode: "tauri",
-        backend: "runtime",
-        baseUrl,
-      } satisfies DesktopBridgeStatus;
+      return invoke<DesktopBridgeStatus>("runtime_status");
     },
     async loadConfig() {
-      return (await getBridge()).loadConfig();
+      return invoke<DesktopConfig>("runtime_load_config");
     },
     async saveConfig(config) {
       await (await getBridge()).saveConfig(config);

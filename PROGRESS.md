@@ -299,3 +299,22 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopUiShell.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/runtime/runtimeService.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 11 - Tauri Startup Commands
+
+- Moved the desktop startup-critical Tauri path off the frontend HTTP bridge for status and config loading.
+- Updated `desktop/src/bridge/tauriBridge.ts` so:
+  - `getStatus()` now calls `invoke<DesktopBridgeStatus>("runtime_status")`
+  - `loadConfig()` now calls `invoke<DesktopConfig>("runtime_load_config")`
+  - the remaining session/message flows still delegate to the HTTP bridge for now
+- Expanded `src-tauri/src/main.rs` with real startup commands:
+  - `runtime_status`
+  - `runtime_load_config`
+  - existing `runtime_base_url`
+- `runtime_status` now reports Tauri-mode runtime health against the local runtime URL, while `runtime_load_config` reads the existing `~/.joone/config.json` shape with sensible defaults for desktop startup.
+- Added a `reqwest` dependency in `src-tauri/Cargo.toml` for native runtime health checks in the Tauri shell.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
