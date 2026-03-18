@@ -73,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **125 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, desktop bridge status coverage, npm CLI launcher coverage, the new desktop UI shell tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
+All development follows strict TDD. Currently, **126 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, desktop bridge status coverage, npm CLI launcher coverage, desktop runtime CORS coverage, the new desktop UI shell tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly.
 
 ### Completed Milestones
 
@@ -129,6 +129,7 @@ All development follows strict TDD. Currently, **125 tests are GREEN**, includin
 - The fifth M20 slice makes the Tauri bridge less synthetic: `desktop/src/bridge/tauriBridge.ts` now asks Tauri for a runtime base URL and then reuses the HTTP bridge against that backend, while `src-tauri/src/main.rs` now exposes a real `runtime_base_url` command instead of pretending the full runtime command surface already exists in Rust.
 - The sixth M20 slice adds explicit bridge/runtime visibility to the desktop shell. `desktop/src/bridge/types.ts` now includes a `DesktopBridgeStatus` contract, every bridge implements `getStatus()`, and `desktop/src/App.tsx` now shows whether the app is currently running on the browser fallback, HTTP dev runtime, or Tauri-backed runtime path. This makes the temporary fallback visible instead of implicit while we continue replacing it.
 - The seventh M20 slice fixes the local desktop dev launcher on Windows/NVM setups. `src/desktop/webDev.ts` no longer depends on `require.resolve("npm/bin/npm-cli.js")`, which fails under modern npm exports; it now uses `src/desktop/npmCli.ts` to prefer `npm_execpath`, then the npm bundle beside the active `node.exe`, and only then package-based npm resolution.
+- The eighth M20 slice fixes browser CORS failures in the local desktop dev path. `src/desktop/server.ts` now sets CORS headers for the Vite dev origins (`http://localhost:1420` and `http://127.0.0.1:1420`) and responds to `OPTIONS` preflight requests, which unblocks `fetch` and `POST /sessions` from the desktop web shell.
 
 ### Tool Routing Summary
 

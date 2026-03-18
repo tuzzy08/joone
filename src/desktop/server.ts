@@ -24,6 +24,28 @@ export async function createDesktopRuntimeServer({
   port = 0,
 }: CreateDesktopRuntimeServerOptions) {
   const app = express();
+  const allowedOrigins = new Set(["http://localhost:1420", "http://127.0.0.1:1420"]);
+
+  app.use((request: Request, response: Response, next) => {
+    const origin = request.headers.origin;
+    if (origin && allowedOrigins.has(origin)) {
+      response.setHeader("Access-Control-Allow-Origin", origin);
+      response.setHeader("Vary", "Origin");
+      response.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET,POST,DELETE,OPTIONS",
+      );
+      response.setHeader("Access-Control-Allow-Headers", "content-type");
+    }
+
+    if (request.method === "OPTIONS") {
+      response.status(204).end();
+      return;
+    }
+
+    next();
+  });
+
   app.use(express.json());
 
   app.get("/health", (_request: Request, response: Response) => {

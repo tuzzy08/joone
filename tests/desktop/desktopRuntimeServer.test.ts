@@ -103,4 +103,64 @@ describe("Desktop runtime server", () => {
       sessionId: "desktop-server-session",
     });
   });
+
+  it("allows the desktop web shell origin via CORS, including preflight requests", async () => {
+    const server = await createDesktopRuntimeServer({
+      runtime: {
+        async loadConfig() {
+          return {};
+        },
+        async saveConfig() {
+          return;
+        },
+        async listSessions() {
+          return [];
+        },
+        async startSession() {
+          return {};
+        },
+        async resumeSession() {
+          return {};
+        },
+        async submitMessage() {
+          return {};
+        },
+        async closeSession() {
+          return;
+        },
+        subscribe() {
+          return () => {};
+        },
+      },
+    });
+
+    closers.push(server.close);
+
+    const health = await fetch(`${server.url}/health`, {
+      headers: { Origin: "http://localhost:1420" },
+    });
+    expect(health.headers.get("access-control-allow-origin")).toBe(
+      "http://localhost:1420",
+    );
+
+    const preflight = await fetch(`${server.url}/sessions`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:1420",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+      },
+    });
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe(
+      "http://localhost:1420",
+    );
+    expect(preflight.headers.get("access-control-allow-methods")).toContain(
+      "POST",
+    );
+    expect(preflight.headers.get("access-control-allow-headers")).toContain(
+      "content-type",
+    );
+  });
 });

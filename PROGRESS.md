@@ -259,3 +259,16 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/npmCliPath.test.ts tests/desktop/desktopDevWorkflow.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 8 - Desktop Runtime CORS Support
+
+- Fixed the browser-facing desktop dev path so the Vite frontend at `http://localhost:1420` can call the local runtime server without failing CORS checks.
+- Added CORS handling to `src/desktop/server.ts`:
+  - allows `http://localhost:1420` and `http://127.0.0.1:1420`
+  - returns the correct `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, and `Access-Control-Allow-Headers`
+  - handles `OPTIONS` preflight requests with `204 No Content`
+- Extended `tests/desktop/desktopRuntimeServer.test.ts` first to cover both simple-origin requests and browser preflight behavior, then implemented the middleware to satisfy the new failing test.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopRuntimeServer.test.ts tests/desktop/desktopDevWorkflow.test.ts tests/desktop/desktopHttpBridge.test.ts tests/desktop/desktopBridgeStatus.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
