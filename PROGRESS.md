@@ -285,3 +285,17 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/runtime/runtimeService.test.ts tests/desktop/desktopRuntimeServer.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 10 - Desktop Error Containment
+
+- Added `desktop/src/DesktopErrorBoundary.tsx` and wrapped the desktop entrypoint in `desktop/src/main.tsx` so render-time crashes now fall back to a clear desktop recovery screen instead of taking down the whole window.
+- Hardened `desktop/src/App.tsx` so bridge/runtime failures are caught and surfaced inside the shell:
+  - `hydrateShell()` failures are caught during startup
+  - `startSession`, `resumeSession`, and `submit` now report failures instead of leaking uncaught promise rejections
+  - runtime `session:error` events now update the shell's visible error state
+- Added a `Last error:` field to the workspace panel and pushed failures into the activity log so the user can see what went wrong without relying on the browser console alone.
+- Added `tests/desktop/desktopErrorHandling.test.ts` first, then implemented the minimum error boundary and reporting flow to satisfy the new red-green coverage.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopUiShell.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/runtime/runtimeService.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

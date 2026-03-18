@@ -20,10 +20,18 @@ export function App() {
   );
   const [input, setInput] = useState("");
   const [activity, setActivity] = useState<string[]>([]);
+  const [lastError, setLastError] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
 
   useEffect(() => {
-    void hydrateShell(bridge, setConfig, setBridgeStatus, setSessions, setActivity);
+    void (async () => {
+      try {
+        await hydrateShell(bridge, setConfig, setBridgeStatus, setSessions, setActivity);
+        setLastError(null);
+      } catch (error) {
+        reportError(error, "Failed to initialize desktop shell");
+      }
+    })();
   }, [bridge]);
 
   useEffect(() => {
@@ -53,23 +61,37 @@ export function App() {
       if (event.type === "session:completed") {
         setStatus("Idle");
       }
+
+      if (event.type === "session:error") {
+        reportError(new Error(event.message), "Runtime error");
+      }
     });
   }, [activeSession, bridge]);
 
   const startSession = async () => {
-    const session = await bridge.startSession();
-    const normalized = normalizeSession(session);
-    setActiveSession(normalized);
-    setSessions((prev) => upsertSession(prev, normalized));
-    setStatus("Idle");
+    try {
+      const session = await bridge.startSession();
+      const normalized = normalizeSession(session);
+      setActiveSession(normalized);
+      setSessions((prev) => upsertSession(prev, normalized));
+      setLastError(null);
+      setStatus("Idle");
+    } catch (error) {
+      reportError(error, "Failed to start session");
+    }
   };
 
   const resumeSession = async (sessionId: string) => {
-    const session = await bridge.resumeSession(sessionId);
-    const normalized = normalizeSession(session);
-    setActiveSession(normalized);
-    setSessions((prev) => upsertSession(prev, normalized));
-    setStatus("Idle");
+    try {
+      const session = await bridge.resumeSession(sessionId);
+      const normalized = normalizeSession(session);
+      setActiveSession(normalized);
+      setSessions((prev) => upsertSession(prev, normalized));
+      setLastError(null);
+      setStatus("Idle");
+    } catch (error) {
+      reportError(error, `Failed to resume ${sessionId}`);
+    }
   };
 
   const submit = async () => {
@@ -77,20 +99,33 @@ export function App() {
       return;
     }
 
-    const session = activeSession ?? (await bridge.startSession());
-    if (!activeSession) {
-      const normalized = normalizeSession(session);
+    try {
+      const session = activeSession ?? (await bridge.startSession());
+      if (!activeSession) {
+        const normalized = normalizeSession(session);
+        setActiveSession(normalized);
+        setSessions((prev) => upsertSession(prev, normalized));
+      }
+
+      const next = await bridge.submitMessage(session.sessionId, input.trim());
+      const normalized = normalizeSession(next);
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
+      setInput("");
+      setLastError(null);
+      setStatus("Thinking");
+    } catch (error) {
+      reportError(error, "Failed to send message");
     }
-
-    const next = await bridge.submitMessage(session.sessionId, input.trim());
-    const normalized = normalizeSession(next);
-    setActiveSession(normalized);
-    setSessions((prev) => upsertSession(prev, normalized));
-    setInput("");
-    setStatus("Thinking");
   };
+
+  function reportError(error: unknown, context: string) {
+    const message = error instanceof Error ? error.message : String(error);
+    const nextError = `${context}: ${message}`;
+    setLastError(nextError);
+    setStatus("Error");
+    setActivity((prev) => [`Error: ${nextError}`, ...prev].slice(0, 10));
+  }
 
   return (
     <div className="shell">
@@ -108,6 +143,7 @@ export function App() {
                 : `${bridgeStatus.backend} unavailable`
               : "Checking..."}
           </p>
+          <p className="error-text">Last error: {lastError ?? "None"}</p>
           <strong>{activeSession?.sessionId ?? "No active session"}</strong>
         </section>
 
