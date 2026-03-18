@@ -67,6 +67,12 @@ _This document serves as a living changelog and status board. Any human or agent
 - **HTTP Bridge**: Added `desktop/src/bridge/httpBridge.ts` and updated bridge selection to prefer `VITE_JOONE_DESKTOP_API_URL` before falling back to the browser mock bridge.
 - **Verification**: Added `tests/desktop/desktopRuntimeServer.test.ts` and `tests/desktop/desktopHttpBridge.test.ts`, then verified with focused Vitest runs, `npm run build`, and `npm run desktop:web:build`.
 
+### 2026-03-18: Architecture Doc Refresh (COMPLETE)
+
+- **System Architecture Updated**: Rewrote `docs/07_system_architecture.md` to reflect the new multi-client architecture: CLI, desktop shell, shared runtime service, HTTP dev server, Tauri bridge, and browser fallback.
+- **New Diagram**: Added a new Mermaid system diagram showing how the desktop UI now reaches the same shared runtime through either Tauri commands/events or HTTP/SSE during local development.
+- **Clarified Browser Fallback**: Documented that the browser fallback is a frontend-only mock bridge used when no real runtime transport is attached, not a production execution path.
+
 ### 2026-03-12: Milestone 19 — Core Engine Alignment & Host-First Execution (COMPLETE)
 
 - **Deep Agents Integration**: Fully replaced the bespoke custom loop with native LangChain/Deep Agents `createDeepAgent` implementation in `ExecutionHarness`.

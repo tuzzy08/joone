@@ -2,143 +2,186 @@
 
 ## High-Level Architecture Overview
 
-The system operates as a CLI-based REPL (Read-Eval-Print Loop) Agent Wrapper. The user runs `joone` in their project directory. The LLM is nested within an "Execution Harness" that mediates all inputs, actions, and memory. Responses are **streamed** token-by-token.
+Joone is no longer just a CLI-first REPL. The current architecture is now **multi-client**:
 
-### Hybrid Sandbox Model
+- the existing **CLI/TUI client** (`joone start`) remains supported
+- the new **desktop client path** is being built on top of the same Node runtime
+- both clients share the same **agent core**, session model, and config store
 
-Joone inherently favors a **Host-First Architecture** combined with deep agent orchestrations:
+The key architectural shift in Milestone 20 is the introduction of a **shared runtime service** that sits between UI clients and the Deep Agents execution engine.
 
-- **File operations** (`write_file`, `read_file`) and native builds (`install_host_dependencies`, `bash`) default to running on the **host machine**, guarded by strict Whitelisting and CommandSanitizer middlewares.
-- **Deep Agent Sandboxing** (`e2b`) is available explicitly via `executionMode: "sandbox"` for dangerous or unknown environments, orchestrated through generic LangChain sandbox primitives.
-- A **File Sync** layer mirrors changed files from host → sandbox only when operating in strict sandbox mode.
+## Current Runtime Model
 
-```
-┌─────────────────────────┐          ┌──────────────────────────┐
-│     HOST MACHINE        │   sync   │      E2B SANDBOX         │
-│                         │ ───────► │                          │
-│  write_file ──► disk    │          │  /workspace/ (mirror)    │
-│  read_file  ◄── disk    │          │                          │
-│                         │          │  bash, npm test, scripts │
-│  User sees changes      │          │  run here (isolated)     │
-│  live in their IDE      │          │                          │
-└─────────────────────────┘          └──────────────────────────┘
-```
+At a high level:
 
-## System Diagram
+1. A client starts or resumes a session
+2. The client talks to the shared runtime service
+3. The runtime prepares config, session state, and `ExecutionHarness`
+4. The harness runs the Deep Agent loop and emits stream/tool/status events
+5. The client renders those events as chat, metrics, and activity
+
+For the desktop path, there are currently three frontend/runtime modes:
+
+- **Tauri bridge**: the intended end-state, where the desktop UI talks to Tauri commands/events
+- **HTTP bridge**: a local development path where the desktop UI talks to a Node dev server over HTTP + SSE
+- **Browser fallback**: a mock bridge used only when neither Tauri nor the local runtime server is present
+
+The **browser fallback** means the desktop UI can still render and behave like an app shell during frontend work, even if no backend runtime is attached yet. It does **not** run the real agent. It returns mock config/session data so UI work can proceed independently.
+
+## Multi-Client Diagram
 
 ```mermaid
 graph TD
-    Client["User CLI (joone)"] -->|Task Input| Config
-    Config["Config Manager (~/.joone/config.json)"] -->|Provider + Key| Factory
-    Factory[Model Factory] -->|BaseChatModel| MainLoop
+    User["User"] --> CLI["CLI Client (Ink)"]
+    User --> Desktop["Desktop Client (React/Tauri)"]
 
-    subgraph Agent Execution Harness (LangGraph)
-        MainLoop[Deep Agent State Graph]
-        State[Conversation State / Memory Saver]
-        PromptBuilder[Cache-Oriented Prompt Builder]
-        StreamHandler[LangChain UI Streaming Hooks]
-
-        State --> PromptBuilder
-        MainLoop --> PromptBuilder
-        PromptBuilder --> LLM((LLM API))
-        LLM -->|Streamed Chunks| StreamHandler
-        StreamHandler -->|Graph Interruptions (HITL)| Middlewares
-        StreamHandler -->|Text Tokens| Terminal[UI Event Render]
+    subgraph Client Layer
+        CLI
+        Desktop
+        Desktop --> Bridge{"Desktop Bridge"}
+        Bridge -->|prod| TauriBridge["Tauri Commands / Events"]
+        Bridge -->|local dev| HttpBridge["HTTP + SSE Bridge"]
+        Bridge -->|no backend| BrowserFallback["Browser Fallback Mock"]
     end
 
-    subgraph Middleware Pipeline
-        Middlewares{Middleware Orchestrator}
-        LoopDet[Loop Detection]
-        PreComp[Pre-Completion Check]
-        Guard[File Size Guardrails]
+    CLI --> Runtime["JooneRuntimeService"]
+    TauriBridge --> Runtime
+    HttpBridge --> DevServer["Desktop Runtime Server"]
+    DevServer --> Runtime
 
-        Middlewares --> LoopDet
-        Middlewares --> PreComp
-        Middlewares --> Guard
+    subgraph Shared Runtime Layer
+        Runtime --> Config["Config Manager (~/.joone/config.json)"]
+        Runtime --> Sessions["SessionStore / SessionResumer"]
+        Runtime --> HarnessFactory["Harness Factory"]
     end
 
-    subgraph "Tool Routing (Hybrid)"
-        Middlewares -->|Approved Tool Call| Router{Tool Router}
-        Router -->|"write_file, read_file"| HostFS["Host Filesystem (Node.js fs)"]
-        Router -->|"bash, test, install"| Sync[File Sync Layer]
-        Sync -->|Upload changed files| Sandbox["E2B MicroVM (Ubuntu)"]
-        Sandbox -->|stdout/stderr| MainLoop
-        HostFS -->|File content| MainLoop
+    HarnessFactory --> Harness["ExecutionHarness / Deep Agent"]
+
+    subgraph Agent Core
+        Harness --> Prompt["Prompt / Context State"]
+        Harness --> Tools["Structured Tools"]
+        Harness --> Tracer["SessionTracer / AutoSave"]
+        Harness --> LLM["LLM Provider"]
     end
+
+    subgraph Execution Backends
+        Tools --> Host["Host-First Tools / Local FS"]
+        Tools --> Sandbox["Sandbox Path (E2B / OpenSandbox)"]
+        Host --> Workspace["Workspace Files"]
+        Sandbox --> Workspace
+    end
+
+    Harness --> Events["Runtime Events"]
+    Events --> CLI
+    Events --> TauriBridge
+    Events --> HttpBridge
+```
+
+## Desktop Development Modes
+
+### 1. Browser fallback
+
+- Implemented in `desktop/src/bridge/browserBridge.ts`
+- Used when the desktop shell is opened without Tauri and without `VITE_JOONE_DESKTOP_API_URL`
+- Purpose: unblock desktop UI development
+- Limitation: does not run the real runtime or agent loop
+
+### 2. Runtime-backed HTTP dev mode
+
+- Implemented by `src/desktop/server.ts` and `src/desktop/devServer.ts`
+- The desktop shell points at the runtime server via `VITE_JOONE_DESKTOP_API_URL`
+- Purpose: enable local desktop frontend work against the real Node runtime before full Tauri command wiring is finished
+- Transport:
+  - HTTP for config/session/message actions
+  - Server-Sent Events for streamed runtime events
+
+### 3. Tauri mode
+
+- Intended production architecture
+- The desktop shell uses `@tauri-apps/api` to call native commands and subscribe to emitted events
+- This will replace the browser fallback as the primary desktop runtime path once Milestone 20 is complete
+
+## Hybrid Sandbox Model
+
+Joone still favors a **Host-First Architecture** combined with Deep Agents orchestration:
+
+- **File operations** (`write_file`, `read_file`) and whitelisted shell execution default to the **host machine**
+- **Sandbox execution** remains available through `executionMode: "sandbox"`
+- A **File Sync** layer mirrors changed files from host to sandbox only when sandbox mode is active
+
+```text
+HOST MACHINE  --sync when needed-->  SANDBOX (/workspace mirror)
+
+Host:
+- read_file
+- write_file
+- host-first shell/backend work
+
+Sandbox:
+- isolated command execution
+- tests / installs / dangerous workloads
 ```
 
 ## Component Breakdown
 
-1. **CLI & Config Layer** (`src/cli/`):
-   - `index.ts`: Parses user commands (`joone`, `joone config`) via Commander.js.
-   - `config.ts`: Reads/writes `~/.joone/config.json`. Stores provider, model, API key (plain text + `chmod 600`), streaming preference, and temperature.
-   - `modelFactory.ts`: Factory that dynamically imports the correct LangChain provider package and returns a `BaseChatModel`. Supports 9+ providers.
+1. **Client Layer**
+   - `src/cli/index.ts`: CLI entrypoint and Ink app launcher
+   - `desktop/src/App.tsx`: desktop shell UI
+   - `desktop/src/bridge/*`: desktop runtime selection and adapters
 
-2. **State Manager & Prompt Builder** (`src/core/promptBuilder.ts`):
-   - Maintains the "Prefix Match". Compiles the static system prompt, appends project variables once, and exclusively appends subsequent messages.
+2. **Shared Runtime Layer**
+   - `src/runtime/service.ts`: reusable session/config/runtime orchestration for all clients
+   - `src/runtime/types.ts`: normalized runtime event and session contracts
+   - `src/desktop/ipc.ts`: desktop-facing runtime bridge contract for the Tauri path
+   - `src/desktop/server.ts`: HTTP/SSE server for local desktop development
 
-3. **Execution Engine (LangGraph & Deep Agents)** (`src/core/agentLoop.ts`):
-   - Refactored from a bespoke while-loop into an official LangGraph `StateGraph` and Agent Executor.
-   - Utilizes Deep Agent primitives for tool binding and execution orchestration, routing transparently between tools, logic loops, and native interruptions.
-   - The **Stream Handler** leans on LangChain's native frontend streaming hooks to power live UI updates without manual buffering.
-   - Extracts precise provider `CacheMetrics` for the tracer.
+3. **Execution Engine**
+   - `src/core/agentLoop.ts`: `ExecutionHarness` backed by Deep Agents and LangGraph primitives
+   - `src/core/promptBuilder.ts`: state/prompt composition
+   - `src/core/contextGuard.ts`: context safety and token boundaries
 
-4. **ContextGuard** (`src/core/contextGuard.ts`):
-   - Proactively checks token payload size _before_ querying the API.
-   - Decouples UI Context Limits from config generation limits using `getProviderContextLimit` (e.g. tracking against 1M tokens for Gemini rather than 4096 output tokens).
-   - Auto-triggers LLM compaction at 80%, with a 95% Emergency Truncation fallback to prevent OOM process deaths.
+4. **Persistence and Recovery**
+   - `src/core/sessionStore.ts`: saved sessions
+   - `src/core/sessionResumer.ts`: resume wakeup + drift detection
+   - `src/core/autoSave.ts`: periodic persistence
 
-5. **Middleware Orchestrator** (`src/middleware/`):
-   - Implements the Observer pattern over the `on_tool_call` and `on_submit` events.
-   - Operates on a structured `ToolResult` interface (`{ content, metadata, isError }`) to robustly pass execution metadata (like process exit codes) through the pipeline without brittle string parsing.
-   - Can _intercept_ or _modify_ a tool request before it hits the tools.
-   - Can _inject_ `<system-reminder>` messages back to the Execution Engine.
+5. **Observability**
+   - `src/tracing/sessionTracer.ts`: token/tool/cost tracing
+   - runtime events normalized into session, token, tool, HITL, and completion events
 
-6. **Tool Router & Hybrid Execution**:
-   - **Host tools** (`write_file`, `read_file`): Execute directly on the host via Node.js `fs`. Changes appear instantly in the user's IDE.
-   - **Sandbox tools** (`bash`, `run_tests`, `install_deps`): Route through the File Sync layer → E2B sandbox.
-   - The split is determined by tool type, not configuration.
+6. **Execution Backends**
+   - Host-first file and shell paths
+   - sandbox path through E2B/OpenSandbox abstractions
 
-7. **File Sync Layer** (`src/sandbox/sync.ts`):
-   - Tracks which files have changed on the host since the last sandbox sync.
-   - Before each sandbox execution, uploads only the changed files to the sandbox's `/workspace/` directory.
-   - Strategies: **upload-on-execute** (default) or **watch & mirror** (future).
+## Event Flow
 
-8. **E2B Sandbox** (`src/sandbox/`):
-   - Each agent session initializes an E2B cloud sandbox via the `e2b` TypeScript SDK.
-   - All bash commands and code execution run via `sandbox.commands.run()`.
-   - The sandbox is destroyed on session end or timeout.
-   - The host machine is **never** exposed to agent-executed commands.
+The normalized runtime event surface now targets both CLI and desktop consumers:
 
-## Tool Routing Table
+- `session:started`
+- `session:state`
+- `agent:token`
+- `tool:start`
+- `tool:end`
+- `hitl:question`
+- `hitl:permission`
+- `session:error`
+- `session:completed`
 
-| Tool                   | Runs On     | Why                                       |
-| ---------------------- | ----------- | ----------------------------------------- |
-| `write_file`           | **Host**    | User sees changes in IDE instantly        |
-| `read_file`            | **Host**    | Reads the real project files              |
-| `run_bash_command`     | **Sandbox** | Protects host from destructive commands   |
-| `run_tests`            | **Sandbox** | Tests may have side-effects               |
-| `install_dependencies` | **Sandbox** | npm install can execute arbitrary scripts |
-| `search_tools`         | **Host**    | Registry lookup, no execution             |
+This event model is the architectural seam that allows the same runtime to power multiple clients.
 
-## Supported LLM Providers
+## Current State vs End State
 
-| Provider       | Package                   | Dynamic Import             |
-| -------------- | ------------------------- | -------------------------- |
-| Anthropic      | `@langchain/anthropic`    | `ChatAnthropic`            |
-| OpenAI         | `@langchain/openai`       | `ChatOpenAI`               |
-| Google         | `@langchain/google-genai` | `ChatGoogleGenerativeAI`   |
-| Mistral        | `@langchain/mistralai`    | `ChatMistralAI`            |
-| Groq           | `@langchain/groq`         | `ChatGroq`                 |
-| DeepSeek       | OpenAI-compatible         | `ChatOpenAI` with base URL |
-| Fireworks      | `@langchain/community`    | `ChatFireworks`            |
-| Together AI    | `@langchain/community`    | `ChatTogetherAI`           |
-| Ollama (Local) | `@langchain/ollama`       | `ChatOllama`               |
+### Current
 
-## Security Roadmap
+- CLI is fully functional
+- shared runtime service exists
+- desktop shell exists
+- HTTP runtime-backed dev mode exists
+- browser fallback exists for UI-only work
+- Tauri production command/event wiring is still incomplete
 
-| Tier | Method                     | Status               |
-| ---- | -------------------------- | -------------------- |
-| 1    | Plain config + `chmod 600` | **Active (Default)** |
-| 2    | OS Keychain (`keytar`)     | Planned              |
-| 3    | AES-256 encrypted config   | Planned              |
+### End state for Milestone 20
+
+- desktop shell talks to the real runtime through Tauri, not mock fallback
+- desktop packaging works for `.msi`, `.dmg`, and `.AppImage`
+- CLI and desktop remain two supported clients over the same runtime core

@@ -124,6 +124,7 @@ All development follows strict TDD. Currently, **120 tests are GREEN**, includin
 - `src/ui/App.tsx` now accepts an optional `onStateChange` callback so the shared runtime extraction can observe session state without re-implementing the current TUI loop all at once.
 - The second M20 slice makes the desktop web shell actually runnable: `desktop/src/bridge/` now contains a browser fallback bridge plus a Tauri adapter, the React shell in `desktop/src/App.tsx` uses that bridge rather than hardcoded sample content, and `npm run desktop:web:build` now completes successfully after adding the required frontend dependencies.
 - The third M20 slice adds a runtime-backed local desktop development path: `src/desktop/server.ts` exposes config/session/message/event routes over HTTP + SSE, `src/desktop/devServer.ts` boots that service against `JooneRuntimeService`, and `desktop/src/bridge/index.ts` now prefers `VITE_JOONE_DESKTOP_API_URL` via `httpBridge.ts` before falling back to the browser mock.
+- `docs/07_system_architecture.md` has been refreshed to reflect the new desktop-aware architecture. It now documents the shared runtime layer, browser fallback, HTTP dev server mode, and the intended Tauri end-state.
 
 ### Tool Routing Summary
 
