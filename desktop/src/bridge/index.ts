@@ -18,5 +18,7 @@ export function getDesktopBridge() {
     return createHttpDesktopBridge(httpBridgeUrl);
   }
 
+  // Temporary frontend-only fallback until every desktop path is backed by
+  // either the local runtime server or the final Tauri command/event bridge.
   return createBrowserDesktopBridge();
 }

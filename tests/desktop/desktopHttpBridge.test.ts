@@ -23,4 +23,14 @@ describe("Desktop HTTP bridge", () => {
     expect(source).toContain("VITE_JOONE_DESKTOP_API_URL");
     expect(source).toContain("createHttpDesktopBridge");
   });
+
+  it("declares the desktop Vite environment variables", () => {
+    const source = fs.readFileSync(
+      path.resolve("desktop/src/vite-env.d.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("interface ImportMetaEnv");
+    expect(source).toContain("VITE_JOONE_DESKTOP_API_URL");
+  });
 });
