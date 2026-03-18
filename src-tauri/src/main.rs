@@ -22,13 +22,13 @@ struct DesktopConfig {
     streaming: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct DesktopMessage {
     role: String,
     content: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct DesktopMetrics {
     #[serde(rename = "totalTokens")]
     total_tokens: u32,
@@ -42,7 +42,7 @@ struct DesktopMetrics {
     total_cost: u32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct DesktopSessionSnapshot {
     #[serde(rename = "sessionId")]
     session_id: String,
@@ -65,6 +65,12 @@ struct SessionHeader {
 struct PersistedSessionSnapshot {
     snapshot: DesktopSessionSnapshot,
     last_saved_at: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResumeSessionArgs {
+    session_id: String,
 }
 
 #[tauri::command]
@@ -151,6 +157,16 @@ fn runtime_list_sessions() -> Vec<DesktopSessionSnapshot> {
     sessions.into_iter().map(|item| item.snapshot).collect()
 }
 
+#[tauri::command]
+fn runtime_start_session() -> Result<DesktopSessionSnapshot, String> {
+    runtime_post("/sessions")
+}
+
+#[tauri::command]
+fn runtime_resume_session(args: ResumeSessionArgs) -> Result<DesktopSessionSnapshot, String> {
+    runtime_post(&format!("/sessions/{}/resume", args.session_id))
+}
+
 fn joone_config_path() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
     Some(PathBuf::from(home).join(".joone").join("config.json"))
@@ -202,13 +218,35 @@ fn read_session_snapshot(path: &PathBuf) -> Option<PersistedSessionSnapshot> {
     })
 }
 
+fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
+    let base_url = runtime_base_url();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .post(format!("{base_url}{path}"))
+        .json(&serde_json::json!({}))
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    response.json::<DesktopSessionSnapshot>().map_err(|error| error.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             runtime_base_url,
             runtime_status,
             runtime_load_config,
-            runtime_list_sessions
+            runtime_list_sessions,
+            runtime_start_session,
+            runtime_resume_session
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Joone Desktop");

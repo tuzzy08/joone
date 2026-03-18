@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 describe("Tauri runtime bridge", () => {
-  it("moves startup status, config, and saved sessions onto real Tauri commands", () => {
+  it("moves startup status, config, saved sessions, and session lifecycle onto real Tauri commands", () => {
     const source = fs.readFileSync(
       path.resolve("desktop/src/bridge/tauriBridge.ts"),
       "utf8",
@@ -14,13 +14,21 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain(
       'invoke<DesktopSessionSnapshot[]>("runtime_list_sessions")',
     );
+    expect(source).toContain(
+      'invoke<DesktopSessionSnapshot>("runtime_start_session")',
+    );
+    expect(source).toContain(
+      'invoke<DesktopSessionSnapshot>("runtime_resume_session"',
+    );
     expect(source).toContain('invoke<string>("runtime_base_url")');
     expect(source).toContain("createHttpDesktopBridge");
     expect(source).not.toContain("return (await getBridge()).loadConfig()");
     expect(source).not.toContain("return (await getBridge()).listSessions()");
+    expect(source).not.toContain("return (await getBridge()).startSession()");
+    expect(source).not.toContain("return (await getBridge()).resumeSession(sessionId)");
   });
 
-  it("registers startup and session-list commands in the Tauri shell", () => {
+  it("registers startup, session-list, and session lifecycle commands in the Tauri shell", () => {
     const source = fs.readFileSync(
       path.resolve("src-tauri/src/main.rs"),
       "utf8",
@@ -30,6 +38,8 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("runtime_status");
     expect(source).toContain("runtime_load_config");
     expect(source).toContain("runtime_list_sessions");
+    expect(source).toContain("runtime_start_session");
+    expect(source).toContain("runtime_resume_session");
     expect(source).toContain("generate_handler");
     expect(source).toContain("JOONE_DESKTOP_RUNTIME_URL");
   });

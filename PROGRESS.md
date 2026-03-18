@@ -347,3 +347,17 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-18: Milestone 20 Slice 14 - Tauri Native Session Start and Resume
+
+- Moved `startSession()` and `resumeSession()` off the Tauri frontend HTTP bridge path.
+- Updated `desktop/src/bridge/tauriBridge.ts` so:
+  - `startSession()` now calls `invoke<DesktopSessionSnapshot>("runtime_start_session")`
+  - `resumeSession(sessionId)` now calls `invoke<DesktopSessionSnapshot>("runtime_resume_session", { sessionId })`
+- Added native Rust commands in `src-tauri/src/main.rs` that proxy those lifecycle actions through the runtime URL and deserialize the returned desktop session snapshot payloads.
+- Added the minimum Rust-side deserialization needed for `DesktopMessage`, `DesktopMetrics`, and `DesktopSessionSnapshot` so Tauri can round-trip session lifecycle payloads cleanly.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

@@ -41,10 +41,12 @@ export function createTauriDesktopBridge(): DesktopBridge {
       return invoke<DesktopSessionSnapshot[]>("runtime_list_sessions");
     },
     async startSession() {
-      return (await getBridge()).startSession();
+      return invoke<DesktopSessionSnapshot>("runtime_start_session");
     },
     async resumeSession(sessionId) {
-      return (await getBridge()).resumeSession(sessionId);
+      return invoke<DesktopSessionSnapshot>("runtime_resume_session", {
+        sessionId,
+      });
     },
     async submitMessage(sessionId, text) {
       return (await getBridge()).submitMessage(sessionId, text);
