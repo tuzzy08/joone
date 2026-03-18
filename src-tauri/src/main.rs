@@ -192,6 +192,15 @@ fn runtime_submit_message(args: SubmitMessageArgs) -> Result<DesktopSessionSnaps
 }
 
 #[tauri::command]
+fn runtime_close_session(
+    state: State<RuntimeSubscriptionState>,
+    args: SessionIdArgs,
+) -> Result<(), String> {
+    unsubscribe_session(&state, &args.session_id);
+    runtime_delete(&format!("/sessions/{}", args.session_id))
+}
+
+#[tauri::command]
 fn runtime_subscribe_session(
     app: AppHandle,
     state: State<RuntimeSubscriptionState>,
@@ -335,6 +344,25 @@ fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
     runtime_post_with_body(path, serde_json::json!({}))
 }
 
+fn runtime_delete(path: &str) -> Result<(), String> {
+    let base_url = runtime_base_url();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .delete(format!("{base_url}{path}"))
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    Ok(())
+}
+
 fn runtime_post_with_body(
     path: &str,
     body: serde_json::Value,
@@ -377,6 +405,7 @@ fn main() {
             runtime_start_session,
             runtime_resume_session,
             runtime_submit_message,
+            runtime_close_session,
             runtime_subscribe_session,
             runtime_unsubscribe_session
         ])

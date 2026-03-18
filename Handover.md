@@ -139,6 +139,7 @@ All development follows strict TDD. Currently, **180 tests are GREEN**, includin
 - The fifteenth M20 slice moves Tauri message submission off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_submit_message`, and `src-tauri/src/main.rs` proxies `{ sessionId, text }` through the runtime URL and deserializes the updated session snapshot response in Rust. At this point, Tauri mode still depends on the HTTP bridge mainly for live event streaming and `closeSession()`.
 - The sixteenth M20 slice moves Tauri live event subscription off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now subscribes via native `listen("runtime-event:{sessionId}")` plus `runtime_subscribe_session` / `runtime_unsubscribe_session`, while `src-tauri/src/main.rs` relays runtime SSE events into native Tauri events and emits `session:error` payloads when the stream fails.
 - The Tauri crate scaffold is also now complete enough for local Rust verification: `src-tauri/build.rs` is wired through `Cargo.toml`, and `src-tauri/icons/icon.ico` exists so `tauri::generate_context!()` and Windows resource generation succeed under `cargo check`.
+- The seventeenth M20 slice moves Tauri session close off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_close_session`, and `src-tauri/src/main.rs` tears down any active subscription before forwarding the `DELETE /sessions/{sessionId}` close request to the runtime. Tauri now owns the full active conversation lifecycle natively; the remaining HTTP fallback in Tauri mode is limited to config save/edit flows that have not migrated yet.
 
 ### Tool Routing Summary
 
@@ -158,6 +159,6 @@ All development follows strict TDD. Currently, **180 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
-2.  **Next slice:** move `closeSession()` off the Tauri HTTP bridge path, then finish the remaining native desktop lifecycle/config editing work so Tauri mode no longer depends on HTTP for active conversations.
+2.  **Next slice:** move desktop config save/edit off the Tauri HTTP bridge path, then continue with the remaining native desktop UX flows (HITL, config editing, packaging polish) so Tauri mode no longer depends on HTTP outside local dev.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

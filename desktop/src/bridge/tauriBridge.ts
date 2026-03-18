@@ -57,7 +57,9 @@ export function createTauriDesktopBridge(): DesktopBridge {
       });
     },
     async closeSession(sessionId) {
-      await (await getBridge()).closeSession(sessionId);
+      await invoke("runtime_close_session", {
+        sessionId,
+      });
     },
     subscribe(sessionId, listener) {
       let activeUnsubscribe: (() => void) | undefined;

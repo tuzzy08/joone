@@ -23,6 +23,7 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain(
       'invoke<DesktopSessionSnapshot>("runtime_submit_message"',
     );
+    expect(source).toContain('invoke("runtime_close_session"');
     expect(source).toContain('listen(`runtime-event:${sessionId}`');
     expect(source).toContain('invoke("runtime_subscribe_session"');
     expect(source).toContain('invoke("runtime_unsubscribe_session"');
@@ -33,6 +34,7 @@ describe("Tauri runtime bridge", () => {
     expect(source).not.toContain("return (await getBridge()).startSession()");
     expect(source).not.toContain("return (await getBridge()).resumeSession(sessionId)");
     expect(source).not.toContain("return (await getBridge()).submitMessage(sessionId, text)");
+    expect(source).not.toContain("await (await getBridge()).closeSession(sessionId)");
     expect(source).not.toContain("activeUnsubscribe = bridge.subscribe(sessionId, listener)");
   });
 
@@ -49,6 +51,7 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("runtime_start_session");
     expect(source).toContain("runtime_resume_session");
     expect(source).toContain("runtime_submit_message");
+    expect(source).toContain("runtime_close_session");
     expect(source).toContain("runtime_subscribe_session");
     expect(source).toContain("runtime_unsubscribe_session");
     expect(source).toContain("runtime-event:");

@@ -401,3 +401,23 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-18: Milestone 20 Slice 17 - Tauri Native Session Close
+
+- Moved `closeSession()` off the Tauri frontend HTTP bridge path.
+- Updated `desktop/src/bridge/tauriBridge.ts` so `closeSession(sessionId)` now calls `invoke("runtime_close_session", { sessionId })` directly instead of delegating to the HTTP bridge.
+- Expanded `src-tauri/src/main.rs` with:
+  - `runtime_close_session`, which tears down any active native subscription for that session before forwarding the close request
+  - `runtime_delete`, a small native helper for runtime lifecycle routes that return `204 No Content`
+- This means the active Tauri conversation lifecycle is now natively handled for:
+  - start/resume
+  - submit message
+  - subscribe/unsubscribe to runtime events
+  - close session
+- Extended `tests/desktop/tauriRuntimeBridge.test.ts` first to require the native close-session command and remove the remaining HTTP fallback assertion.
+- Verification completed:
+  - `npm test -- tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm test -- tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopUiShell.test.ts tests/desktop/desktopRuntimeServer.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
