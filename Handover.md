@@ -141,6 +141,7 @@ All development follows strict TDD. Currently, **180 tests are GREEN**, includin
 - The Tauri crate scaffold is also now complete enough for local Rust verification: `src-tauri/build.rs` is wired through `Cargo.toml`, and `src-tauri/icons/icon.ico` exists so `tauri::generate_context!()` and Windows resource generation succeed under `cargo check`.
 - The seventeenth M20 slice moves Tauri session close off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_close_session`, and `src-tauri/src/main.rs` tears down any active subscription before forwarding the `DELETE /sessions/{sessionId}` close request to the runtime. Tauri now owns the full active conversation lifecycle natively; the remaining HTTP fallback in Tauri mode is limited to config save/edit flows that have not migrated yet.
 - The eighteenth M20 slice moves Tauri config save off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_save_config`, and `src-tauri/src/main.rs` updates `~/.joone/config.json` directly while preserving unrelated settings. The Tauri desktop frontend no longer depends on the HTTP bridge at all; only the Rust shell talks to the runtime URL during Tauri runs.
+- The nineteenth M20 slice surfaces native config save in the actual desktop UI. `desktop/src/App.tsx` now includes a settings panel with editable provider/model/streaming controls, a dirty-checking `Save Settings` button, and activity feedback after a successful save. This is the first real desktop-side configuration UX on top of the native Tauri config commands.
 
 ### Tool Routing Summary
 
@@ -160,6 +161,6 @@ All development follows strict TDD. Currently, **180 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
-2.  **Next slice:** add the actual desktop config editing UX and continue with the remaining native desktop flows (HITL, packaging polish, installer validation) now that Tauri mode no longer depends on the HTTP bridge at the frontend layer.
+2.  **Next slice:** add desktop HITL UX and continue with the remaining native desktop flows (permission/questions, packaging polish, installer validation) now that basic config editing exists and the Tauri frontend no longer depends on the HTTP bridge.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

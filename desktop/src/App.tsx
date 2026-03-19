@@ -11,6 +11,7 @@ import type {
 export function App() {
   const bridge = useMemo<DesktopBridge>(() => getDesktopBridge(), []);
   const [config, setConfig] = useState<DesktopConfig | null>(null);
+  const [draftConfig, setDraftConfig] = useState<DesktopConfig | null>(null);
   const [bridgeStatus, setBridgeStatus] = useState<DesktopBridgeStatus | null>(
     null,
   );
@@ -27,10 +28,25 @@ export function App() {
   useEffect(() => {
     void runAction(
       () =>
-        hydrateShell(bridge, setConfig, setBridgeStatus, setSessions, setActivity),
+        hydrateShell(
+          bridge,
+          setConfig,
+          setDraftConfig,
+          setBridgeStatus,
+          setSessions,
+          setActivity,
+        ),
       "Failed to initialize desktop shell",
     );
   }, [bridge]);
+
+  useEffect(() => {
+    if (!config) {
+      return;
+    }
+
+    setDraftConfig(config);
+  }, [config]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -108,6 +124,41 @@ export function App() {
     }, "Failed to send message");
   };
 
+  const saveSettings = async () => {
+    if (!draftConfig) {
+      return;
+    }
+
+    await runAction(async () => {
+      await bridge.saveConfig(draftConfig);
+      setConfig(draftConfig);
+      setStatus("Idle");
+      setActivity((prev) => [
+        `Settings saved for ${draftConfig.provider} / ${draftConfig.model}.`,
+        ...prev,
+      ].slice(0, 10));
+    }, "Failed to save settings");
+  };
+
+  const configDirty =
+    config != null &&
+    draftConfig != null &&
+    (config.provider !== draftConfig.provider ||
+      config.model !== draftConfig.model ||
+      config.streaming !== draftConfig.streaming);
+
+  function updateDraftConfig(
+    patch: Partial<DesktopConfig> | ((current: DesktopConfig) => DesktopConfig),
+  ) {
+    setDraftConfig((current) => {
+      if (!current) {
+        return current;
+      }
+
+      return typeof patch === "function" ? patch(current) : { ...current, ...patch };
+    });
+  }
+
   async function runAction(action: () => Promise<void>, context: string) {
     retryActionRef.current = action;
     try {
@@ -176,6 +227,56 @@ export function App() {
           </p>
           <p className="error-text">Last error: {lastError ?? "None"}</p>
           <strong>{activeSession?.sessionId ?? "No active session"}</strong>
+        </section>
+
+        <section className="panel">
+          <h2>Settings</h2>
+          {draftConfig ? (
+            <div className="settings-form">
+              <label className="settings-row">
+                <span>Provider</span>
+                <input
+                  className="input"
+                  value={draftConfig.provider}
+                  onChange={(event) => updateDraftConfig({
+                    provider: event.target.value,
+                  })}
+                />
+              </label>
+
+              <label className="settings-row">
+                <span>Model</span>
+                <input
+                  className="input"
+                  value={draftConfig.model}
+                  onChange={(event) => updateDraftConfig({
+                    model: event.target.value,
+                  })}
+                />
+              </label>
+
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={draftConfig.streaming}
+                  onChange={(event) => updateDraftConfig({
+                    streaming: event.target.checked,
+                  })}
+                />
+                <span>Streaming responses</span>
+              </label>
+
+              <button
+                className="button"
+                disabled={!configDirty}
+                onClick={() => void saveSettings()}
+              >
+                Save Settings
+              </button>
+            </div>
+          ) : (
+            <p>Loading settings...</p>
+          )}
         </section>
 
         <section className="panel">
@@ -266,6 +367,7 @@ export function App() {
 async function hydrateShell(
   bridge: DesktopBridge,
   setConfig: (config: DesktopConfig) => void,
+  setDraftConfig: (config: DesktopConfig) => void,
   setBridgeStatus: (status: DesktopBridgeStatus) => void,
   setSessions: (sessions: DesktopSessionSnapshot[]) => void,
   setActivity: React.Dispatch<React.SetStateAction<string[]>>,
@@ -277,6 +379,7 @@ async function hydrateShell(
   ]);
 
   setConfig(config);
+  setDraftConfig(config);
   setBridgeStatus(bridgeStatus);
   setSessions(sessions.map((session) => normalizeSession(session)));
   setActivity([

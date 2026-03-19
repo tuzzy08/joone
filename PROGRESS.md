@@ -439,3 +439,21 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-19: Milestone 20 Slice 19 - Desktop Settings Editor
+
+- Added a real desktop settings editor to `desktop/src/App.tsx`.
+- The desktop shell now keeps a `draftConfig` alongside the loaded config and exposes editable controls for:
+  - `provider`
+  - `model`
+  - `streaming`
+- Added a `Save Settings` action wired through `bridge.saveConfig(...)`, which now uses the native Tauri config save command in desktop mode.
+- The settings panel only enables save when the draft differs from the persisted config, and successful saves now add a visible activity log entry.
+- Added settings-specific styling in `desktop/src/styles.css` for the new form rows and toggle layout.
+- Extended `tests/desktop/desktopUiShell.test.ts` first to require the settings editor contract and native save wiring, then implemented the minimum UI to make it pass.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts`
+  - `npm test -- tests/desktop/desktopUiShell.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopScaffold.test.ts tests/desktop/desktopRuntimeServer.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`

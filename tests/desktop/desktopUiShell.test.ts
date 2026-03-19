@@ -33,4 +33,17 @@ describe("Desktop UI shell", () => {
     expect(source).toContain("invoke");
     expect(source).toContain("listen");
   });
+
+  it("adds a desktop settings editor wired to config save", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+
+    expect(source).toContain("draftConfig");
+    expect(source).toContain("Save Settings");
+    expect(source).toContain("bridge.saveConfig");
+    expect(source).toContain("onChange={(event) => updateDraftConfig(");
+    expect(styles).toContain(".settings-form");
+    expect(styles).toContain(".settings-row");
+    expect(styles).toContain(".toggle-row");
+  });
 });
