@@ -158,9 +158,13 @@ body {
 }
 
 .session-list {
-  max-height: 320px;
+  max-height: 260px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.session-list--expanded {
+  max-height: 360px;
 }
 
 .settings-form {
@@ -211,6 +215,11 @@ body {
   font-size: 0.8rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+}
+
+.session-toggle {
+  width: 100%;
+  margin-top: 2px;
 }
 
 .input {

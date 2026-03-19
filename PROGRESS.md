@@ -566,10 +566,13 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 
 ### 2026-03-19: Desktop Session Panel Scroll Refinement
 
-- Refined the desktop sessions panel so it no longer uses an expanding/collapsing list.
-- Updated `desktop/src/App.tsx` to render the full session list directly and rely on panel scrolling instead of `View more` / `Show fewer`.
-- Updated `desktop/src/styles.css` so `.session-list` now has a fixed max height with `overflow-y: auto`, keeping the sidebar stable even when many sessions exist.
-- No new regression was added for this refactor per user request.
+- Refined the desktop sessions panel again to restore the intended compact default behavior.
+- Updated `desktop/src/App.tsx` so the shell now:
+  - shows only the first three sessions by default
+  - restores `View more` / `Show fewer`
+  - keeps the expanded list scrollable instead of letting it stretch the whole sidebar
+- Updated `desktop/src/styles.css` so the base and expanded session-list states both remain bounded with `overflow-y: auto`.
+- Removed the interrupted partial regression edit from `tests/desktop/desktopUiShell.test.ts` per user request not to add test coverage for this kind of UI refactor.
 - Verification completed:
   - `npm run build`
   - `npm run desktop:web:build`
