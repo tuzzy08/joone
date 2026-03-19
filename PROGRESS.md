@@ -514,3 +514,19 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts`
   - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/ui/hitlQueue.test.ts`
   - `npm run build`
+
+### 2026-03-19: Milestone 20 Slice 22 - Desktop Bundle Output Validation
+
+- Added `src/desktop/validateBundles.ts`, a small packaging validator that maps each CI runner to the expected Tauri bundle output:
+  - `windows-latest` -> `.msi`
+  - `ubuntu-22.04` -> `.AppImage`
+  - `macos-latest` -> `.dmg`
+- The validator walks `src-tauri/target/release/bundle/<platform>` and fails with a descriptive error if the expected installer artifact is missing.
+- Updated `.github/workflows/desktop-build.yml` to run `npx tsx src/desktop/validateBundles.ts --runner "${{ matrix.platform }}"` after the Tauri build step, turning packaging into a real smoke check instead of only a fire-and-forget bundle action.
+- Added tests first:
+  - `tests/desktop/desktopBundleValidation.test.ts` covers the validator against real temp directories
+  - `tests/desktop/desktopPackagingValidationWorkflow.test.ts` locks the workflow step into CI
+- Verification completed:
+  - `npm test -- tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts`
+  - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/ui/hitlQueue.test.ts`
+  - `npm run build`

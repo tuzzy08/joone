@@ -52,3 +52,6 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         with:
           uploadWorkflowArtifacts: true
+
+      - name: Validate bundle outputs
+        run: npx tsx src/desktop/validateBundles.ts --runner "${{ matrix.platform }}"

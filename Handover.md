@@ -145,6 +145,7 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - The twentieth M20 slice adds desktop HITL answer UX and fixes the multi-question desktop edge case. Runtime HITL events now carry stable IDs, `JooneRuntimeService` exposes `answerHitl(id, answer)`, both HTTP dev mode and Tauri mode can submit answers, and `desktop/src/App.tsx` now keeps a FIFO queue of pending HITL prompts instead of letting a later prompt overwrite an earlier unanswered one.
 - A parity follow-up slice now brings the same FIFO HITL queue model to the legacy Ink/TUI path. `src/ui/App.tsx` normalizes queued questions and permissions into `pendingHitlPrompts`, removes only the answered prompt by stable ID, and `src/ui/components/HITLPrompt.tsx` surfaces `Pending prompts: N` so older queued requests are no longer overwritten there either.
 - The next M20 packaging slice adds `.github/workflows/desktop-build.yml`, a cross-platform GitHub Actions workflow that runs on `main`, `dev`, pull requests, and manual dispatch. It installs platform prerequisites, validates the desktop bridge/TUI packaging contracts, builds the shared TypeScript runtime, and uses `tauri-apps/tauri-action@v1` to produce Windows, macOS, and Ubuntu desktop bundles as workflow artifacts.
+- A follow-up packaging validation slice adds `src/desktop/validateBundles.ts` plus workflow coverage proving each runner emits the expected bundle type after the Tauri build (`.msi` on Windows, `.AppImage` on Ubuntu, `.dmg` on macOS). The GitHub Actions workflow now fails fast if the packaging step completes without producing the installer artifact we expect for that platform.
 
 ### Tool Routing Summary
 
@@ -164,6 +165,6 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
-2.  **Next slice:** continue packaging polish and installer validation on top of the new cross-platform GitHub Actions bundle workflow, or return to any remaining desktop UX gaps once CI artifact generation is stable.
+2.  **Next slice:** continue packaging polish on top of the validated cross-platform bundle workflow, with the main remaining packaging work now being artifact naming/release polish and real installer smoke testing on each target OS.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._
