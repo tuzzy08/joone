@@ -8,6 +8,10 @@ import { StreamingText } from "./components/StreamingText.js";
 import { ToolCallPanel, ToolCallStatus } from "./components/ToolCallPanel.js";
 import { HITLPrompt } from "./components/HITLPrompt.js";
 import { FileBrowser } from "./components/FileBrowser.js";
+import {
+  WorkflowTodoItem,
+  WorkflowTodoPanel,
+} from "./components/WorkflowTodoPanel.js";
 import type { ExecutionHarness } from "../core/agentLoop.js";
 import type { ContextState } from "../core/promptBuilder.js";
 import { countMessageTokens } from "../core/tokenCounter.js";
@@ -26,6 +30,7 @@ export interface Message {
 }
 
 export interface ActiveToolCall {
+  id: string;
   name: string;
   args: Record<string, unknown>;
   status: ToolCallStatus;
@@ -92,6 +97,9 @@ export const App: React.FC<AppProps> = ({
   const [activeToolCall, setActiveToolCall] = useState<ActiveToolCall | null>(
     null,
   );
+  const [recentToolCalls, setRecentToolCalls] = useState<ActiveToolCall[]>([]);
+  const [workflowTodos, setWorkflowTodos] = useState<WorkflowTodoItem[]>([]);
+  const toolRunCounterRef = React.useRef(0);
 
   // Core Engine State
   const [contextState, setContextState] = useState<ContextState>(initialState);
@@ -108,16 +116,34 @@ export const App: React.FC<AppProps> = ({
   useEffect(() => {
     const bridge = HITLBridge.getInstance();
 
-    const onQuestion = (question: HITLQuestion) =>
+    const onQuestion = (question: HITLQuestion) => {
       setPendingHitlPrompts((prev) => [
         ...prev,
         { id: question.id, type: "question", question },
       ]);
-    const onPermission = (permission: HITLPermissionRequest) =>
+      setWorkflowTodos((prev) =>
+        updateWorkflowTodo(
+          prev,
+          "tools",
+          "blocked",
+          "Waiting for your answer before continuing.",
+        ),
+      );
+    };
+    const onPermission = (permission: HITLPermissionRequest) => {
       setPendingHitlPrompts((prev) => [
         ...prev,
         { id: permission.id, type: "permission", permission },
       ]);
+      setWorkflowTodos((prev) =>
+        updateWorkflowTodo(
+          prev,
+          "tools",
+          "blocked",
+          `Waiting for approval to run ${permission.toolName}.`,
+        ),
+      );
+    };
 
     bridge.on("question", onQuestion);
     bridge.on("permission", onPermission);
@@ -127,6 +153,14 @@ export const App: React.FC<AppProps> = ({
     bridge.resolveAnswer = (id: string, answer: string) => {
       origResolve(id, answer);
       setPendingHitlPrompts((prev) => prev.filter((prompt) => prompt.id !== id));
+      setWorkflowTodos((prev) =>
+        updateWorkflowTodo(
+          prev,
+          "tools",
+          "active",
+          "Continuing after your input.",
+        ),
+      );
     };
 
     return () => {
@@ -142,17 +176,17 @@ export const App: React.FC<AppProps> = ({
     }
 
     const handleEvent = (event: AgentEvent) => {
-      // Ignore text streams so we don't spam the action log
-      if (event.type === "agent:stream") return;
+      // Streaming tokens and tool calls have dedicated UI panels.
+      if (
+        event.type === "agent:stream" ||
+        event.type === "tool:start" ||
+        event.type === "tool:end"
+      ) {
+        return;
+      }
 
       let content = "";
       switch (event.type) {
-        case "tool:start":
-          content = `[Tool] Starting ${event.toolName}`;
-          break;
-        case "tool:end":
-          content = `[Tool] ${event.toolName} completed in ${event.durationMs}ms`;
-          break;
         case "subagent:spawn":
           content = `[SubAgent] Spawning '${event.agentName}'`;
           break;
@@ -327,6 +361,14 @@ export const App: React.FC<AppProps> = ({
           event.data?.chunk?.content
         ) {
           setStreamingTokens((prev) => [...prev, event.data.chunk.content]);
+          setWorkflowTodos((prev) =>
+            updateWorkflowTodo(
+              prev,
+              "response",
+              "active",
+              "Drafting the reply.",
+            ),
+          );
         } else if (event.event === "on_chat_model_end") {
           const content = event.data.output?.content;
           if (content && typeof content === "string") {
@@ -334,19 +376,44 @@ export const App: React.FC<AppProps> = ({
             setMessages((prev) => [...prev, { role: "agent", content }]);
           }
         } else if (event.event === "on_tool_start") {
-          setActiveToolCall({
+          const toolCall = {
+            id: `${event.name}-${toolRunCounterRef.current++}`,
             name: event.name,
             args: event.data.input,
             status: "running",
-          });
+          } satisfies ActiveToolCall;
+          setActiveToolCall(toolCall);
+          setRecentToolCalls((prev) => [toolCall, ...prev].slice(0, 4));
+          setWorkflowTodos((prev) =>
+            updateWorkflowTodo(
+              prev,
+              "tools",
+              "active",
+              `Running ${event.name}.`,
+            ),
+          );
         } else if (event.event === "on_tool_end") {
-          // Note: we don't display the full tool output as result since it can be massive.
-          setActiveToolCall({
-            name: event.name,
-            args: event.data.input,
-            status: "success",
-            result: "Tool execution completed.",
-          });
+          const toolResult = summarizeToolResult(event.data.output);
+          setActiveToolCall((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: "success",
+                  result: toolResult,
+                }
+              : null,
+          );
+          setRecentToolCalls((prev) =>
+            finalizeRecentToolCalls(prev, event.name, event.data.input, toolResult),
+          );
+          setWorkflowTodos((prev) =>
+            updateWorkflowTodo(
+              prev,
+              "tools",
+              "done",
+              `${event.name} completed.`,
+            ),
+          );
           await new Promise((resolve) => setTimeout(resolve, 800));
           setActiveToolCall(null);
         } else if (
@@ -397,11 +464,28 @@ export const App: React.FC<AppProps> = ({
         nextHistory = finalState.messages;
       }
       setContextState({ ...currentState, conversationHistory: nextHistory });
+      setWorkflowTodos((prev) => completeWorkflowTodos(prev));
       setIsProcessing(false);
       setIsStreaming(false);
     } catch (error: any) {
       setIsStreaming(false);
-      setActiveToolCall(null);
+      setActiveToolCall((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "error",
+              result: error.message,
+            }
+          : null,
+      );
+      setRecentToolCalls((prev) => failRecentToolCalls(prev, error.message));
+      setWorkflowTodos((prev) =>
+        prev.map((todo) =>
+          todo.state === "done"
+            ? todo
+            : { ...todo, state: "blocked", note: error.message }
+        ),
+      );
       setIsProcessing(false);
       setMessages((prev) => [
         ...prev,
@@ -475,6 +559,7 @@ export const App: React.FC<AppProps> = ({
 
     // 1. Update UI
     setMessages((prev) => [...prev, { role: "user", content: userText }]);
+    setWorkflowTodos(createWorkflowTodos(userText));
 
     // 2. Update Engine State
     const { HumanMessage } = await import("@langchain/core/messages");
@@ -538,6 +623,12 @@ export const App: React.FC<AppProps> = ({
             </Static>
           </Box>
 
+          {workflowTodos.length > 0 && (
+            <Box paddingX={1}>
+              <WorkflowTodoPanel todos={workflowTodos} />
+            </Box>
+          )}
+
           {isStreaming && (
             <Box paddingX={1} marginBottom={1}>
               <Box marginLeft={2}>
@@ -557,6 +648,20 @@ export const App: React.FC<AppProps> = ({
                 status={activeToolCall.status}
                 result={activeToolCall.result}
               />
+            </Box>
+          )}
+
+          {!activeToolCall && recentToolCalls.length > 0 && (
+            <Box flexDirection="column" paddingX={1} marginBottom={1}>
+              {recentToolCalls.map((toolCall) => (
+                <ToolCallPanel
+                  key={toolCall.id}
+                  toolName={toolCall.name}
+                  args={toolCall.args}
+                  status={toolCall.status}
+                  result={toolCall.result}
+                />
+              ))}
             </Box>
           )}
 
@@ -617,3 +722,146 @@ export const App: React.FC<AppProps> = ({
     </Box>
   );
 };
+
+function createWorkflowTodos(query: string): WorkflowTodoItem[] {
+  return [
+    {
+      id: "request",
+      label: "Understand the request",
+      note: summarizeText(query, 88),
+      state: "done",
+    },
+    {
+      id: "tools",
+      label: "Inspect files and run tools",
+      note: "Waiting for the next action.",
+      state: "active",
+    },
+    {
+      id: "response",
+      label: "Draft the response",
+      note: "Will start once enough context is gathered.",
+      state: "pending",
+    },
+  ];
+}
+
+function updateWorkflowTodo(
+  todos: WorkflowTodoItem[],
+  id: WorkflowTodoItem["id"],
+  state: WorkflowTodoItem["state"],
+  note: string,
+): WorkflowTodoItem[] {
+  return todos.map((todo) => (todo.id === id ? { ...todo, state, note } : todo));
+}
+
+function completeWorkflowTodos(todos: WorkflowTodoItem[]): WorkflowTodoItem[] {
+  const hadToolActivity = todos.some(
+    (todo) => todo.id === "tools" && todo.note !== "Waiting for the next action.",
+  );
+
+  return todos.map((todo) => {
+    if (todo.id === "tools") {
+      return {
+        ...todo,
+        state: "done",
+        note: hadToolActivity
+          ? "Tool work finished successfully."
+          : "No tool calls were needed for this reply.",
+      };
+    }
+
+    if (todo.id === "response") {
+      return {
+        ...todo,
+        state: "done",
+        note: "Reply delivered to the conversation.",
+      };
+    }
+
+    return { ...todo, state: "done" };
+  });
+}
+
+function finalizeRecentToolCalls(
+  toolCalls: ActiveToolCall[],
+  toolName: string,
+  args: Record<string, unknown>,
+  result: string,
+): ActiveToolCall[] {
+  let updated = false;
+
+  const next = toolCalls.map((toolCall) => {
+    if (!updated && toolCall.name === toolName && toolCall.status === "running") {
+      updated = true;
+      const nextToolCall: ActiveToolCall = {
+        ...toolCall,
+        args,
+        status: "success",
+        result,
+      };
+      return nextToolCall;
+    }
+
+    return toolCall;
+  });
+
+  if (updated) {
+    return next;
+  }
+
+  const completedTool: ActiveToolCall = {
+      id: `${toolName}-${Date.now()}`,
+      name: toolName,
+      args,
+      status: "success",
+      result,
+    };
+
+  return [completedTool, ...toolCalls].slice(0, 4);
+}
+
+function failRecentToolCalls(
+  toolCalls: ActiveToolCall[],
+  errorMessage: string,
+): ActiveToolCall[] {
+  let updated = false;
+
+  return toolCalls.map((toolCall) => {
+    if (!updated && toolCall.status === "running") {
+      updated = true;
+      return {
+        ...toolCall,
+        status: "error",
+        result: errorMessage,
+      };
+    }
+
+    return toolCall;
+  });
+}
+
+function summarizeToolResult(value: unknown): string {
+  if (typeof value === "string") {
+    return summarizeText(value, 180);
+  }
+
+  if (value == null) {
+    return "Tool execution completed.";
+  }
+
+  try {
+    return summarizeText(JSON.stringify(value), 180);
+  } catch {
+    return summarizeText(String(value), 180);
+  }
+}
+
+function summarizeText(value: string, limit: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, limit - 3)}...`;
+}

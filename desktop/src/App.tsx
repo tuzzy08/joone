@@ -9,10 +9,12 @@ import type {
   DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
+  DesktopMessage,
   DesktopSessionSnapshot,
 } from "./bridge/types";
 
 const INITIAL_VISIBLE_SESSIONS = 3;
+const MAX_TOOL_RUNS = 6;
 
 type PendingHitlPrompt =
   | {
@@ -27,6 +29,28 @@ type PendingHitlPrompt =
       toolName: string;
       args: Record<string, unknown>;
     };
+
+type WorkTodoState = "done" | "active" | "pending" | "blocked";
+
+interface WorkTodo {
+  id: "request" | "tools" | "response";
+  label: string;
+  note: string;
+  state: WorkTodoState;
+}
+
+interface ToolRunCard {
+  id: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  status: "running" | "success" | "error";
+  result?: string;
+}
+
+interface SessionWorkstream {
+  todos: WorkTodo[];
+  toolRuns: ToolRunCard[];
+}
 
 export function App() {
   const bridge = useMemo<DesktopBridge>(() => getDesktopBridge(), []);
@@ -44,9 +68,13 @@ export function App() {
   const [activity, setActivity] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
-  // Keep HITL prompts FIFO so a later question does not overwrite an earlier unanswered one.
-  const [pendingHitlPrompts, setPendingHitlPrompts] = useState<PendingHitlPrompt[]>([]);
+  const [pendingHitlPrompts, setPendingHitlPrompts] = useState<
+    PendingHitlPrompt[]
+  >([]);
   const [hitlAnswer, setHitlAnswer] = useState("");
+  const [sessionWorkstreams, setSessionWorkstreams] = useState<
+    Record<string, SessionWorkstream>
+  >({});
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
@@ -77,6 +105,8 @@ export function App() {
       return;
     }
 
+    ensureSessionWorkstream(activeSession.sessionId);
+
     return bridge.subscribe(activeSession.sessionId, (event) => {
       setActivity((prev) => [describeEvent(event), ...prev].slice(0, 10));
 
@@ -92,15 +122,67 @@ export function App() {
         );
       }
 
+      if (event.type === "session:status") {
+        setStatus(capitalizeStatus(event.status));
+      }
+
       if (event.type === "agent:token") {
         setStatus("Streaming");
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          ...current,
+          todos: setTodoState(current.todos, "response", "active", "Drafting the reply."),
+        }));
+      }
+
+      if (event.type === "tool:start") {
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          todos: setTodoState(
+            current.todos,
+            "tools",
+            "active",
+            `Running ${event.toolName}.`,
+          ),
+          toolRuns: [
+            {
+              id: `${event.toolName}-${Date.now()}`,
+              toolName: event.toolName,
+              args: event.args,
+              status: "running",
+            },
+            ...current.toolRuns,
+          ].slice(0, MAX_TOOL_RUNS),
+        }));
+      }
+
+      if (event.type === "tool:end") {
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          todos: setTodoState(
+            current.todos,
+            "tools",
+            "done",
+            `${event.toolName} completed.`,
+          ),
+          toolRuns: finalizeToolRun(current.toolRuns, event),
+        }));
       }
 
       if (event.type === "session:completed") {
         setStatus("Idle");
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          ...current,
+          todos: completeTurnTodos(current.todos, current.toolRuns),
+        }));
       }
 
       if (event.type === "session:error") {
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          todos: current.todos.map((todo) =>
+            todo.state === "done"
+              ? todo
+              : { ...todo, state: "blocked", note: event.message }
+          ),
+          toolRuns: failLatestToolRun(current.toolRuns, event.message),
+        }));
         reportError(new Error(event.message), "Runtime error");
       }
 
@@ -115,6 +197,15 @@ export function App() {
           },
         ]);
         setStatus("Awaiting input");
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          ...current,
+          todos: setTodoState(
+            current.todos,
+            "tools",
+            "blocked",
+            "Waiting for your answer before continuing.",
+          ),
+        }));
       }
 
       if (event.type === "hitl:permission") {
@@ -128,6 +219,15 @@ export function App() {
           },
         ]);
         setStatus("Awaiting input");
+        updateSessionWorkstream(event.sessionId, (current) => ({
+          ...current,
+          todos: setTodoState(
+            current.todos,
+            "tools",
+            "blocked",
+            `Waiting for approval to run ${event.toolName}.`,
+          ),
+        }));
       }
     });
   }, [activeSession, bridge]);
@@ -138,6 +238,7 @@ export function App() {
       const normalized = normalizeSession(session);
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
+      ensureSessionWorkstream(normalized.sessionId);
       setStatus("Idle");
     }, "Failed to start session");
   };
@@ -148,6 +249,7 @@ export function App() {
       const normalized = normalizeSession(session);
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
+      ensureSessionWorkstream(normalized.sessionId);
       setStatus("Idle");
     }, `Failed to resume ${sessionId}`);
   };
@@ -157,20 +259,27 @@ export function App() {
       return;
     }
 
+    const prompt = input.trim();
+
     await runAction(async () => {
-      const session = activeSession ?? (await bridge.startSession());
+      const session = normalizeSession(activeSession ?? (await bridge.startSession()));
       if (!activeSession) {
-        const normalized = normalizeSession(session);
-        setActiveSession(normalized);
-        setSessions((prev) => upsertSession(prev, normalized));
+        setActiveSession(session);
+        setSessions((prev) => upsertSession(prev, session));
       }
 
-      const next = await bridge.submitMessage(session.sessionId, input.trim());
+      setStatus("Thinking");
+      setInput("");
+      setPendingHitlPrompts([]);
+      updateSessionWorkstream(session.sessionId, (current) => ({
+        todos: createTurnTodos(prompt),
+        toolRuns: current.toolRuns,
+      }));
+
+      const next = await bridge.submitMessage(session.sessionId, prompt);
       const normalized = normalizeSession(next);
       setActiveSession(normalized);
       setSessions((prev) => upsertSession(prev, normalized));
-      setInput("");
-      setStatus("Thinking");
     }, "Failed to send message");
   };
 
@@ -204,6 +313,23 @@ export function App() {
     ? sessions
     : sessions.slice(0, INITIAL_VISIBLE_SESSIONS);
   const activeHitlPrompt = pendingHitlPrompts[0];
+  const activeWorkstream = activeSession
+    ? sessionWorkstreams[activeSession.sessionId] ?? emptyWorkstream()
+    : emptyWorkstream();
+  const activeProgress = getTodoProgress(activeWorkstream.todos);
+
+  function ensureSessionWorkstream(sessionId: string) {
+    setSessionWorkstreams((current) => {
+      if (current[sessionId]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [sessionId]: emptyWorkstream(),
+      };
+    });
+  }
 
   function updateDraftConfig(
     patch: Partial<DesktopConfig> | ((current: DesktopConfig) => DesktopConfig),
@@ -231,6 +357,16 @@ export function App() {
         model: hasCurrentModel ? current.model : fallbackModel,
       };
     });
+  }
+
+  function updateSessionWorkstream(
+    sessionId: string,
+    updater: (current: SessionWorkstream) => SessionWorkstream,
+  ) {
+    setSessionWorkstreams((current) => ({
+      ...current,
+      [sessionId]: updater(current[sessionId] ?? emptyWorkstream()),
+    }));
   }
 
   async function runAction(action: () => Promise<void>, context: string) {
@@ -275,12 +411,23 @@ export function App() {
     await runAction(async () => {
       await bridge.answerHitl(activeHitlPrompt.id, hitlAnswer.trim());
       setPendingHitlPrompts((prev) => prev.slice(1));
+      if (activeSession) {
+        updateSessionWorkstream(activeSession.sessionId, (current) => ({
+          ...current,
+          todos: setTodoState(
+            current.todos,
+            "tools",
+            "active",
+            "Continuing after your input.",
+          ),
+        }));
+      }
       setActivity((prev) => [
         `Answered HITL prompt ${activeHitlPrompt.id}.`,
         ...prev,
       ].slice(0, 10));
       setHitlAnswer("");
-      setStatus((pendingHitlPrompts.length > 1) ? "Awaiting input" : "Idle");
+      setStatus("Thinking");
     }, "Failed to answer HITL prompt");
   };
 
@@ -306,7 +453,6 @@ export function App() {
         <section className="panel">
           <h2>Workspace</h2>
           <p>{config ? `${config.provider} / ${config.model}` : "Loading..."}</p>
-          {/* Keep the active transport explicit while the desktop shell still supports a temporary mock bridge. */}
           <p>Bridge: {bridgeStatus?.mode ?? "Loading..."}</p>
           <p>
             Runtime:{" "}
@@ -369,9 +515,11 @@ export function App() {
                 <input
                   type="checkbox"
                   checked={draftConfig.streaming}
-                  onChange={(event) => updateDraftConfig({
-                    streaming: event.target.checked,
-                  })}
+                  onChange={(event) =>
+                    updateDraftConfig({
+                      streaming: event.target.checked,
+                    })
+                  }
                 />
                 <span>Streaming responses</span>
               </label>
@@ -401,7 +549,9 @@ export function App() {
                 {visibleSessions.map((session) => (
                   <button
                     key={session.sessionId}
-                    className="session-item"
+                    className={`session-item${
+                      activeSession?.sessionId === session.sessionId ? " session-item--active" : ""
+                    }`}
                     onClick={() => void resumeSession(session.sessionId)}
                   >
                     <strong>{describeSession(session)}</strong>
@@ -461,11 +611,73 @@ export function App() {
             </article>
           ) : (
             activeSession?.messages.map((message, index) => (
-              <article key={index} className={`bubble bubble-${message.role}`}>
-                {message.content}
+              <article key={`${message.role}-${index}`} className={`bubble bubble-${message.role}`}>
+                <span className="bubble-label">{labelForRole(message.role)}</span>
+                <div>{message.content}</div>
               </article>
             ))
           )}
+
+          {activeWorkstream.todos.length > 0 ? (
+            <article className="work-card todo-card">
+              <div className="work-card-header">
+                <div>
+                  <span className="eyebrow">Live progress</span>
+                  <strong>Agent workstream</strong>
+                </div>
+                <span className="status-chip">{activeProgress}% complete</span>
+              </div>
+              <div className="todo-list">
+                {activeWorkstream.todos.map((todo) => (
+                  <div key={todo.id} className={`todo-step todo-step--${todo.state}`}>
+                    <span className="todo-icon">{iconForTodo(todo.state)}</span>
+                    <div>
+                      <strong>{todo.label}</strong>
+                      <p>{todo.note}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ) : null}
+
+          {activeWorkstream.toolRuns.map((toolRun) => (
+            <article key={toolRun.id} className={`work-card tool-card tool-card--${toolRun.status}`}>
+              <div className="work-card-header">
+                <div>
+                  <span className="eyebrow">Tool call</span>
+                  <strong>{toolRun.toolName}</strong>
+                </div>
+                <span className={`status-chip status-chip--${toolRun.status}`}>
+                  {toolRun.status === "running"
+                    ? "Running"
+                    : toolRun.status === "success"
+                      ? "Complete"
+                      : "Needs attention"}
+                </span>
+              </div>
+              {Object.keys(toolRun.args).length > 0 ? (
+                <div className="tool-block">
+                  <span className="tool-block-label">Arguments</span>
+                  <div className="tool-chip-row">
+                    {Object.entries(toolRun.args)
+                      .slice(0, 4)
+                      .map(([key, value]) => (
+                        <span key={key} className="tool-chip">
+                          {key}: {formatValue(value)}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
+              {toolRun.result ? (
+                <div className="tool-block">
+                  <span className="tool-block-label">Result</span>
+                  <p className="tool-result">{summarizeText(toolRun.result, 180)}</p>
+                </div>
+              ) : null}
+            </article>
+          ))}
         </section>
 
         {activeHitlPrompt ? (
@@ -606,6 +818,8 @@ function describeEvent(event: DesktopEvent): string {
   switch (event.type) {
     case "session:started":
       return `Started ${event.sessionId}`;
+    case "session:status":
+      return `Session ${event.status}`;
     case "session:completed":
       return `Completed ${event.sessionId}`;
     case "session:error":
@@ -622,5 +836,192 @@ function describeEvent(event: DesktopEvent): string {
       return `Permission requested for ${event.toolName}`;
     default:
       return event.type;
+  }
+}
+
+function emptyWorkstream(): SessionWorkstream {
+  return {
+    todos: [],
+    toolRuns: [],
+  };
+}
+
+function createTurnTodos(prompt: string): WorkTodo[] {
+  return [
+    {
+      id: "request",
+      label: "Understand the request",
+      note: summarizeText(prompt, 96),
+      state: "done",
+    },
+    {
+      id: "tools",
+      label: "Inspect files and run tools",
+      note: "Waiting for the next action.",
+      state: "active",
+    },
+    {
+      id: "response",
+      label: "Draft the response",
+      note: "Will start once the agent has enough context.",
+      state: "pending",
+    },
+  ];
+}
+
+function completeTurnTodos(
+  todos: WorkTodo[],
+  toolRuns: ToolRunCard[],
+): WorkTodo[] {
+  return todos.map((todo) => {
+    if (todo.id === "tools") {
+      return {
+        ...todo,
+        state: "done",
+        note:
+          toolRuns.length > 0
+            ? "Tool work finished successfully."
+            : "No tool calls were needed for this reply.",
+      };
+    }
+
+    if (todo.id === "response") {
+      return {
+        ...todo,
+        state: "done",
+        note: "Reply delivered to the conversation.",
+      };
+    }
+
+    return {
+      ...todo,
+      state: "done",
+    };
+  });
+}
+
+function setTodoState(
+  todos: WorkTodo[],
+  id: WorkTodo["id"],
+  state: WorkTodoState,
+  note: string,
+): WorkTodo[] {
+  return todos.map((todo) => (todo.id === id ? { ...todo, state, note } : todo));
+}
+
+function finalizeToolRun(
+  toolRuns: ToolRunCard[],
+  event: Extract<DesktopEvent, { type: "tool:end" }>,
+): ToolRunCard[] {
+  let updated = false;
+  const next = toolRuns.map((toolRun) => {
+    if (!updated && toolRun.toolName === event.toolName && toolRun.status === "running") {
+      updated = true;
+      return {
+        ...toolRun,
+        status: "success",
+        result: event.result,
+        args: event.args ?? toolRun.args,
+      };
+    }
+
+    return toolRun;
+  });
+
+  if (updated) {
+    return next;
+  }
+
+  return [
+    {
+      id: `${event.toolName}-${Date.now()}`,
+      toolName: event.toolName,
+      args: event.args ?? {},
+      status: "success",
+      result: event.result,
+    },
+    ...toolRuns,
+  ].slice(0, MAX_TOOL_RUNS);
+}
+
+function failLatestToolRun(toolRuns: ToolRunCard[], message: string): ToolRunCard[] {
+  let updated = false;
+  return toolRuns.map((toolRun) => {
+    if (!updated && toolRun.status === "running") {
+      updated = true;
+      return {
+        ...toolRun,
+        status: "error",
+        result: message,
+      };
+    }
+
+    return toolRun;
+  });
+}
+
+function getTodoProgress(todos: WorkTodo[]): number {
+  if (todos.length === 0) {
+    return 0;
+  }
+
+  const completed = todos.filter((todo) => todo.state === "done").length;
+  return Math.round((completed / todos.length) * 100);
+}
+
+function labelForRole(role: DesktopMessage["role"]): string {
+  switch (role) {
+    case "user":
+      return "You";
+    case "agent":
+      return "Joone";
+    default:
+      return "System";
+  }
+}
+
+function capitalizeStatus(status: "idle" | "processing" | "closed"): string {
+  if (status === "processing") {
+    return "Thinking";
+  }
+
+  return status[0].toUpperCase() + status.slice(1);
+}
+
+function summarizeText(value: string, limit: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, limit - 3)}...`;
+}
+
+function formatValue(value: unknown): string {
+  if (typeof value === "string") {
+    return summarizeText(value, 40);
+  }
+
+  if (value == null) {
+    return "null";
+  }
+
+  try {
+    return summarizeText(JSON.stringify(value), 40);
+  } catch {
+    return summarizeText(String(value), 40);
+  }
+}
+
+function iconForTodo(state: WorkTodoState): string {
+  switch (state) {
+    case "done":
+      return "Done";
+    case "active":
+      return "Now";
+    case "blocked":
+      return "Hold";
+    default:
+      return "Next";
   }
 }

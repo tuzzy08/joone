@@ -46,9 +46,25 @@ export type DesktopEvent =
       state: { conversationHistory: DesktopMessage[] };
       metrics: DesktopMetrics;
     }
+  | {
+      type: "session:status";
+      sessionId: string;
+      status: "idle" | "processing" | "closed";
+    }
   | { type: "agent:token"; sessionId: string; token: string }
-  | { type: "tool:start"; sessionId: string; toolName: string }
-  | { type: "tool:end"; sessionId: string; toolName: string }
+  | {
+      type: "tool:start";
+      sessionId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    }
+  | {
+      type: "tool:end";
+      sessionId: string;
+      toolName: string;
+      args?: Record<string, unknown>;
+      result: string;
+    }
   | {
       type: "hitl:question";
       sessionId: string;

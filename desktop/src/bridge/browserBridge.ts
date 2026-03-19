@@ -53,6 +53,19 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     },
     async submitMessage(sessionId: string, text: string) {
       const current = sessions.get(sessionId) ?? createSession(sessionId);
+      emit(listeners, sessionId, {
+        type: "session:status",
+        sessionId,
+        status: "processing",
+      });
+      emit(listeners, sessionId, {
+        type: "tool:start",
+        sessionId,
+        toolName: "browser.preview",
+        args: {
+          prompt: text,
+        },
+      });
       const next: DesktopSessionSnapshot = {
         ...current,
         description: describeBrowserSession([
@@ -77,12 +90,26 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       sessions.set(sessionId, next);
       emit(listeners, sessionId, { type: "agent:token", sessionId, token: "..." });
       emit(listeners, sessionId, {
+        type: "tool:end",
+        sessionId,
+        toolName: "browser.preview",
+        args: {
+          prompt: text,
+        },
+        result: "Mock browser bridge completed the preview run.",
+      });
+      emit(listeners, sessionId, {
         type: "session:state",
         sessionId,
         state: { conversationHistory: next.messages },
         metrics: next.metrics,
       });
       emit(listeners, sessionId, { type: "session:completed", sessionId });
+      emit(listeners, sessionId, {
+        type: "session:status",
+        sessionId,
+        status: "idle",
+      });
       return next;
     },
     async closeSession(sessionId: string) {
