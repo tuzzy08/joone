@@ -68,6 +68,7 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       });
       const next: DesktopSessionSnapshot = {
         ...current,
+        lastSavedAt: Date.now(),
         description: describeBrowserSession([
           ...current.messages,
           { role: "user", content: text },
@@ -135,6 +136,7 @@ function createSession(sessionId = `desktop-${Date.now()}`): DesktopSessionSnaps
     provider: DEFAULT_CONFIG.provider,
     model: DEFAULT_CONFIG.model,
     description: "Untitled session",
+    lastSavedAt: Date.now(),
     messages: [
       {
         role: "system",

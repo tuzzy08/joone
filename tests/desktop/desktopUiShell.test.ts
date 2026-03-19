@@ -71,4 +71,23 @@ describe("Desktop UI shell", () => {
     expect(styles).toContain(".hitl-card");
     expect(styles).toContain(".hitl-queue");
   });
+
+  it("shows saved-time metadata and clearer resume state in the sessions panel", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+    const types = fs.readFileSync(
+      path.resolve("desktop/src/bridge/types.ts"),
+      "utf8",
+    );
+
+    expect(types).toContain("lastSavedAt?: number");
+    expect(source).toContain("resumingSessionId");
+    expect(source).toContain("formatSessionTimestamp");
+    expect(source).toContain("Last saved");
+    expect(source).toContain("Current session");
+    expect(source).toContain("Resuming...");
+    expect(styles).toContain(".session-details");
+    expect(styles).toContain(".session-time");
+    expect(styles).toContain(".session-badge");
+  });
 });

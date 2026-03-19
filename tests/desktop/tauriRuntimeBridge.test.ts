@@ -61,4 +61,20 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("generate_handler");
     expect(source).toContain("JOONE_DESKTOP_RUNTIME_URL");
   });
+
+  it("carries persisted session timestamps through the native session snapshot contract", () => {
+    const bridgeTypes = fs.readFileSync(
+      path.resolve("desktop/src/bridge/types.ts"),
+      "utf8",
+    );
+    const tauriSource = fs.readFileSync(
+      path.resolve("src-tauri/src/main.rs"),
+      "utf8",
+    );
+
+    expect(bridgeTypes).toContain("lastSavedAt?: number");
+    expect(tauriSource).toContain('#[serde(rename = "lastSavedAt")]');
+    expect(tauriSource).toContain("last_saved_at: Option<u64>");
+    expect(tauriSource).toContain("last_saved_at: Some(header.last_saved_at)");
+  });
 });

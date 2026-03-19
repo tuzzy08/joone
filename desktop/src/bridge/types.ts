@@ -29,6 +29,7 @@ export interface DesktopSessionSnapshot {
   provider: string;
   model: string;
   description?: string;
+  lastSavedAt?: number;
   messages: DesktopMessage[];
   metrics: DesktopMetrics;
 }

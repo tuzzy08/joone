@@ -61,6 +61,7 @@ export function App() {
   );
   const [sessions, setSessions] = useState<DesktopSessionSnapshot[]>([]);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
   const [activeSession, setActiveSession] = useState<DesktopSessionSnapshot | null>(
     null,
   );
@@ -244,13 +245,18 @@ export function App() {
   };
 
   const resumeSession = async (sessionId: string) => {
+    setResumingSessionId(sessionId);
     await runAction(async () => {
-      const session = await bridge.resumeSession(sessionId);
-      const normalized = normalizeSession(session);
-      setActiveSession(normalized);
-      setSessions((prev) => upsertSession(prev, normalized));
-      ensureSessionWorkstream(normalized.sessionId);
-      setStatus("Idle");
+      try {
+        const session = await bridge.resumeSession(sessionId);
+        const normalized = normalizeSession(session);
+        setActiveSession(normalized);
+        setSessions((prev) => upsertSession(prev, normalized));
+        ensureSessionWorkstream(normalized.sessionId);
+        setStatus("Idle");
+      } finally {
+        setResumingSessionId(null);
+      }
     }, `Failed to resume ${sessionId}`);
   };
 
@@ -551,12 +557,28 @@ export function App() {
                     key={session.sessionId}
                     className={`session-item${
                       activeSession?.sessionId === session.sessionId ? " session-item--active" : ""
+                    }${
+                      resumingSessionId === session.sessionId ? " session-item--loading" : ""
                     }`}
+                    disabled={resumingSessionId != null}
                     onClick={() => void resumeSession(session.sessionId)}
                   >
-                    <strong>{describeSession(session)}</strong>
+                    <div className="session-item-header">
+                      <strong>{describeSession(session)}</strong>
+                      {activeSession?.sessionId === session.sessionId ? (
+                        <span className="session-badge">Current session</span>
+                      ) : null}
+                    </div>
                     <span className="session-meta">{session.sessionId}</span>
-                    <span>{session.description ?? describeSession(session)}</span>
+                    <div className="session-details">
+                      <span>{session.description ?? describeSession(session)}</span>
+                      <span className="session-time">
+                        Last saved {formatSessionTimestamp(session.lastSavedAt)}
+                      </span>
+                    </div>
+                    <span className="session-action">
+                      {resumingSessionId === session.sessionId ? "Resuming..." : "Resume session"}
+                    </span>
                   </button>
                 ))}
                 {sessions.length > INITIAL_VISIBLE_SESSIONS ? (
@@ -812,6 +834,39 @@ function describeSession(session: DesktopSessionSnapshot): string {
   }
 
   return normalized.length > 72 ? `${normalized.slice(0, 69)}...` : normalized;
+}
+
+function formatSessionTimestamp(lastSavedAt?: number): string {
+  if (!lastSavedAt) {
+    return "just now";
+  }
+
+  const elapsedMs = Date.now() - lastSavedAt;
+  if (elapsedMs < 60_000) {
+    return "just now";
+  }
+
+  const elapsedMinutes = Math.floor(elapsedMs / 60_000);
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours}h ago`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) {
+    return `${elapsedDays}d ago`;
+  }
+
+  return new Date(lastSavedAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function describeEvent(event: DesktopEvent): string {
