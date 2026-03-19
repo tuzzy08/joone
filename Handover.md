@@ -144,6 +144,7 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - The nineteenth M20 slice surfaces native config save in the actual desktop UI. `desktop/src/App.tsx` now includes a settings panel with editable provider/model/streaming controls, a dirty-checking `Save Settings` button, and activity feedback after a successful save. This is the first real desktop-side configuration UX on top of the native Tauri config commands.
 - The twentieth M20 slice adds desktop HITL answer UX and fixes the multi-question desktop edge case. Runtime HITL events now carry stable IDs, `JooneRuntimeService` exposes `answerHitl(id, answer)`, both HTTP dev mode and Tauri mode can submit answers, and `desktop/src/App.tsx` now keeps a FIFO queue of pending HITL prompts instead of letting a later prompt overwrite an earlier unanswered one.
 - A parity follow-up slice now brings the same FIFO HITL queue model to the legacy Ink/TUI path. `src/ui/App.tsx` normalizes queued questions and permissions into `pendingHitlPrompts`, removes only the answered prompt by stable ID, and `src/ui/components/HITLPrompt.tsx` surfaces `Pending prompts: N` so older queued requests are no longer overwritten there either.
+- The next M20 packaging slice adds `.github/workflows/desktop-build.yml`, a cross-platform GitHub Actions workflow that runs on `main`, `dev`, pull requests, and manual dispatch. It installs platform prerequisites, validates the desktop bridge/TUI packaging contracts, builds the shared TypeScript runtime, and uses `tauri-apps/tauri-action@v1` to produce Windows, macOS, and Ubuntu desktop bundles as workflow artifacts.
 
 ### Tool Routing Summary
 
@@ -163,6 +164,6 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
-2.  **Next slice:** continue with desktop completion work now that both the desktop shell and the legacy Ink/TUI safely queue multiple HITL prompts; the main remaining choices are packaging polish, installer validation, and any remaining desktop UX gaps.
+2.  **Next slice:** continue packaging polish and installer validation on top of the new cross-platform GitHub Actions bundle workflow, or return to any remaining desktop UX gaps once CI artifact generation is stable.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

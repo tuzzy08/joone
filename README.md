@@ -56,6 +56,11 @@ The desktop app is currently an in-progress Milestone 20 scaffold. The repositor
 
 The CLI remains the stable primary interface while the desktop client is wired up incrementally.
 
+### Desktop Packaging CI
+
+Cross-platform desktop bundle automation now lives in GitHub Actions via `.github/workflows/desktop-build.yml`.
+The workflow builds Tauri bundles on Windows, macOS, and Ubuntu and uploads the generated artifacts as workflow artifacts for installer smoke testing.
+
 ### Configuration
 
 If you ever need to change your LLM provider, API keys, or models, run the configuration wizard:

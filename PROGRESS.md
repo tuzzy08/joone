@@ -498,3 +498,19 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/ui/hitlQueue.test.ts`
   - `npm test -- tests/ui/hitlQueue.test.ts tests/ui/appLifecycle.test.ts tests/runtime/runtimeService.test.ts`
   - `npm run build`
+
+### 2026-03-19: Milestone 20 Slice 21 - Desktop Packaging Workflow
+
+- Added `.github/workflows/desktop-build.yml` so desktop bundle generation now has a first cross-platform GitHub Actions path.
+- The workflow runs on `main`, `dev`, pull requests, and manual dispatch, then builds on:
+  - `windows-latest`
+  - `ubuntu-22.04`
+  - `macos-latest`
+- Added Linux-specific package installation for Tauri's Ubuntu bundle requirements (`libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`, `patchelf`).
+- The workflow installs npm dependencies, runs focused desktop packaging regressions, builds the shared TypeScript runtime, and then uses `tauri-apps/tauri-action@v1` with `uploadWorkflowArtifacts: true` so installers are emitted as workflow artifacts instead of requiring a release flow immediately.
+- Added `tests/desktop/desktopPackagingWorkflow.test.ts` first to lock the workflow contract before implementation.
+- Updated `README.md` to point contributors at the new desktop packaging CI path.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts`
+  - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/ui/hitlQueue.test.ts`
+  - `npm run build`
