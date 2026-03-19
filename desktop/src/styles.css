@@ -157,6 +157,12 @@ body {
   gap: 10px;
 }
 
+.session-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .settings-form {
   display: flex;
   flex-direction: column;
@@ -205,10 +211,6 @@ body {
   font-size: 0.8rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-}
-
-.session-toggle {
-  width: 100%;
 }
 
 .input {

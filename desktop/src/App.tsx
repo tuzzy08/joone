@@ -12,8 +12,6 @@ import type {
   DesktopSessionSnapshot,
 } from "./bridge/types";
 
-const INITIAL_VISIBLE_SESSIONS = 4;
-
 type PendingHitlPrompt =
   | {
       type: "question";
@@ -36,7 +34,6 @@ export function App() {
     null,
   );
   const [sessions, setSessions] = useState<DesktopSessionSnapshot[]>([]);
-  const [showAllSessions, setShowAllSessions] = useState(false);
   const [activeSession, setActiveSession] = useState<DesktopSessionSnapshot | null>(
     null,
   );
@@ -200,9 +197,6 @@ export function App() {
   const availableModels = draftConfig
     ? PROVIDER_MODELS[draftConfig.provider] ?? []
     : [];
-  const visibleSessions = showAllSessions
-    ? sessions
-    : sessions.slice(0, INITIAL_VISIBLE_SESSIONS);
   const activeHitlPrompt = pendingHitlPrompts[0];
 
   function updateDraftConfig(
@@ -396,7 +390,7 @@ export function App() {
               <p>No saved sessions yet.</p>
             ) : (
               <>
-                {visibleSessions.map((session) => (
+                {sessions.map((session) => (
                   <button
                     key={session.sessionId}
                     className="session-item"
@@ -407,16 +401,6 @@ export function App() {
                     <span>{session.description ?? describeSession(session)}</span>
                   </button>
                 ))}
-                {sessions.length > INITIAL_VISIBLE_SESSIONS ? (
-                  <button
-                    className="ghost-button session-toggle"
-                    onClick={() => setShowAllSessions((current) => !current)}
-                  >
-                    {showAllSessions
-                      ? "Show fewer"
-                      : `View more (${sessions.length - INITIAL_VISIBLE_SESSIONS})`}
-                  </button>
-                ) : null}
               </>
             )}
           </div>

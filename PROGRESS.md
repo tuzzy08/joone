@@ -563,3 +563,13 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-19: Desktop Session Panel Scroll Refinement
+
+- Refined the desktop sessions panel so it no longer uses an expanding/collapsing list.
+- Updated `desktop/src/App.tsx` to render the full session list directly and rely on panel scrolling instead of `View more` / `Show fewer`.
+- Updated `desktop/src/styles.css` so `.session-list` now has a fixed max height with `overflow-y: auto`, keeping the sidebar stable even when many sessions exist.
+- No new regression was added for this refactor per user request.
+- Verification completed:
+  - `npm run build`
+  - `npm run desktop:web:build`
