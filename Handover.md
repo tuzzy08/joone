@@ -154,6 +154,8 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - The latest desktop/TUI UX slice introduces a shared workstream presentation model on top of the existing runtime event stream. `desktop/src/App.tsx` now renders live todo/progress cards plus richer tool-call cards in the conversation pane, and the Ink client in `src/ui/App.tsx` mirrors the same structure via `src/ui/components/WorkflowTodoPanel.tsx` and the upgraded `ToolCallPanel`.
 - `desktop/src/bridge/types.ts` now carries the extra tool/status event fields those surfaces need (`session:status`, `tool:start.args`, `tool:end.result`, optional `tool:end.args`), while the browser fallback bridge emits matching mock events so the local fallback path still exercises the richer workstream UI.
 - Tool activity is now intentionally de-emphasized in plain TUI system-message logs because tools have first-class UI panels in both clients. If future work adds more event categories, prefer surfacing them through the workstream model before adding more textual event spam.
+- The next desktop UX slice polished session resume affordances. `desktop/src/bridge/types.ts` now exposes `lastSavedAt?: number`, `src-tauri/src/main.rs` carries persisted session timestamps through the native snapshot contract, and the browser fallback stamps mock sessions too so the local dev path exercises the same UI.
+- `desktop/src/App.tsx` and `desktop/src/styles.css` now render human-readable `Last saved ...` metadata for session cards, a `Current session` badge for the active thread, and a `Resuming...` loading state that disables competing resume actions while a session is loading.
 
 ### Tool Routing Summary
 
@@ -173,7 +175,7 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — continue the post-foundation UX and packaging finish work now that the runtime boundary is native end-to-end.
-2.  **Next product slice:** session resume polish and conversation affordances, especially clearer saved-time metadata and stronger active-session feedback around resume/load actions.
+2.  **Next product slice:** continue desktop conversation affordance polish around resumed sessions, especially auto-focus/scroll behavior and any remaining empty/loading state cleanup after resume.
 3.  **Next delivery slice:** continue packaging polish on top of the validated cross-platform bundle workflow, with the main remaining packaging work now being artifact naming/release polish and real installer smoke testing on each target OS.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

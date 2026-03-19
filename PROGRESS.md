@@ -612,3 +612,22 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 - Verification completed:
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-19: Desktop Session Resume Polish
+
+- Added a proper saved-session recency path to the desktop contract:
+  - `desktop/src/bridge/types.ts` now exposes `lastSavedAt?: number`
+  - `src-tauri/src/main.rs` now carries persisted `lastSavedAt` through the native `DesktopSessionSnapshot`
+  - `desktop/src/bridge/browserBridge.ts` now stamps mock sessions too so the local fallback path exercises the same UI
+- Polished the desktop sessions rail in `desktop/src/App.tsx` and `desktop/src/styles.css`:
+  - active session cards now show a `Current session` badge
+  - saved sessions now show `Last saved ...` metadata with human-readable relative timestamps
+  - the currently loading session now shows `Resuming...` and temporarily disables other resume actions for a clearer in-flight state
+- Added regression coverage for this slice:
+  - `tests/desktop/desktopUiShell.test.ts` now locks the saved-time metadata and resume-state UI contract
+  - `tests/desktop/tauriRuntimeBridge.test.ts` now locks the native `lastSavedAt` propagation path
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts tests/desktop/tauriRuntimeBridge.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
