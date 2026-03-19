@@ -457,3 +457,32 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-19: Milestone 20 Slice 20 - Desktop HITL Queue and Answer Flow
+
+- Added a real desktop HITL interaction path across the runtime, transports, and UI.
+- Extended the runtime event contract so HITL events now include stable prompt IDs:
+  - `hitl:question` now carries `id`, `question`, and `options`
+  - `hitl:permission` now carries `id`, `toolName`, and `args`
+- Added `answerHitl(id, answer)` to `JooneRuntimeService`, the desktop IPC bridge, the HTTP dev server, and the desktop bridge contracts so prompts can be answered from either the desktop web shell or Tauri mode.
+- Added native `runtime_answer_hitl` in `src-tauri/src/main.rs`, so the Tauri desktop app can submit prompt answers without falling back to HTTP at the frontend layer.
+- Added a queue-based desktop HITL UI in `desktop/src/App.tsx`:
+  - prompts are stored FIFO in `pendingHitlPrompts`
+  - the active prompt is rendered in a dedicated HITL card
+  - additional queued prompts are surfaced via `Pending prompts: N`
+  - answers are submitted through `bridge.answerHitl(...)`
+- Investigation result for "what happens if HITL questions are more than one":
+  - before this slice, later prompts could overwrite earlier ones at the desktop UI layer because only one active prompt was tracked
+  - after this slice, the desktop path handles multiple pending prompts in order using stable IDs and a FIFO queue
+  - the older Ink/TUI path still uses single prompt state, so desktop is now safer here than the legacy TUI
+- Extended tests first across the relevant seams:
+  - `tests/runtime/runtimeService.test.ts` now proves multiple HITL questions can be emitted and answered in sequence
+  - `tests/desktop/desktopUiShell.test.ts` now requires the desktop HITL queue/answer UI
+  - `tests/desktop/desktopRuntimeServer.test.ts` now requires the HITL answer route
+  - `tests/desktop/tauriRuntimeBridge.test.ts` now requires the native Tauri HITL answer command
+- Verification completed:
+  - `npm test -- tests/runtime/runtimeService.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopUiShell.test.ts tests/desktop/desktopRuntimeServer.test.ts`
+  - `npm test -- tests/runtime/runtimeService.test.ts tests/desktop/desktopUiShell.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopRuntimeServer.test.ts tests/desktop/desktopErrorRecovery.test.ts tests/desktop/desktopErrorHandling.test.ts tests/desktop/desktopBridgeStatus.test.ts tests/desktop/desktopScaffold.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`

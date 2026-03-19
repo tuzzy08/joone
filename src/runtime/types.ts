@@ -78,6 +78,7 @@ export interface RuntimeToolEndEvent {
 export interface RuntimeQuestionEvent {
   type: "hitl:question";
   sessionId: string;
+  id: string;
   question: string;
   options?: string[];
 }
@@ -85,6 +86,7 @@ export interface RuntimeQuestionEvent {
 export interface RuntimePermissionEvent {
   type: "hitl:permission";
   sessionId: string;
+  id: string;
   toolName: string;
   args: Record<string, unknown>;
 }

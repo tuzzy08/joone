@@ -20,6 +20,9 @@ export function createDesktopRuntimeBridge(runtime: JooneRuntimeService) {
     async saveConfig(config: Awaited<ReturnType<typeof runtime.loadConfig>>) {
       return runtime.saveConfig(config);
     },
+    async answerHitl(id: string, answer: string) {
+      return runtime.answerHitl(id, answer);
+    },
     async listSessions() {
       return runtime.listSessions();
     },

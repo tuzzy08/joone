@@ -73,7 +73,7 @@ This document serves as a comprehensive handover note for future agents or engin
 
 ## 3. Current Project State
 
-All development follows strict TDD. Currently, **180 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, desktop bridge status coverage, npm CLI launcher coverage, desktop runtime CORS coverage, the desktop UI shell and error-recovery suites, the native Tauri bridge scaffolding/streaming tests, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly, and `cargo check --manifest-path src-tauri/Cargo.toml` is now green when run with a temporary `CARGO_TARGET_DIR`.
+All development follows strict TDD. Currently, **183 tests are GREEN**, including CLI import/lazy-loading coverage, startup benchmark utility tests, App lifecycle startup/shutdown coverage, the shared runtime service tests, desktop scaffold tests, desktop bridge status coverage, npm CLI launcher coverage, desktop runtime CORS coverage, the desktop UI shell and error-recovery suites, the native Tauri bridge scaffolding/streaming tests, the new desktop HITL queue coverage, and the first-turn Deep Agents regression covering the M19 harness migration. TypeScript compiles cleanly, and `cargo check --manifest-path src-tauri/Cargo.toml` is now green when run with a temporary `CARGO_TARGET_DIR`.
 
 ### Completed Milestones
 
@@ -142,6 +142,8 @@ All development follows strict TDD. Currently, **180 tests are GREEN**, includin
 - The seventeenth M20 slice moves Tauri session close off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_close_session`, and `src-tauri/src/main.rs` tears down any active subscription before forwarding the `DELETE /sessions/{sessionId}` close request to the runtime. Tauri now owns the full active conversation lifecycle natively; the remaining HTTP fallback in Tauri mode is limited to config save/edit flows that have not migrated yet.
 - The eighteenth M20 slice moves Tauri config save off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_save_config`, and `src-tauri/src/main.rs` updates `~/.joone/config.json` directly while preserving unrelated settings. The Tauri desktop frontend no longer depends on the HTTP bridge at all; only the Rust shell talks to the runtime URL during Tauri runs.
 - The nineteenth M20 slice surfaces native config save in the actual desktop UI. `desktop/src/App.tsx` now includes a settings panel with editable provider/model/streaming controls, a dirty-checking `Save Settings` button, and activity feedback after a successful save. This is the first real desktop-side configuration UX on top of the native Tauri config commands.
+- The twentieth M20 slice adds desktop HITL answer UX and fixes the multi-question desktop edge case. Runtime HITL events now carry stable IDs, `JooneRuntimeService` exposes `answerHitl(id, answer)`, both HTTP dev mode and Tauri mode can submit answers, and `desktop/src/App.tsx` now keeps a FIFO queue of pending HITL prompts instead of letting a later prompt overwrite an earlier unanswered one.
+- Important investigation result: the desktop path now handles multiple pending HITL prompts in order, but the older Ink/TUI path still keeps only one active `hitlQuestion` / `hitlPermission` in state. If multiple prompts can stack there before the first one is answered, the legacy TUI would still overwrite the older prompt. That remains a follow-up item outside the desktop slice.
 
 ### Tool Routing Summary
 
@@ -161,6 +163,6 @@ All development follows strict TDD. Currently, **180 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
-2.  **Next slice:** add desktop HITL UX and continue with the remaining native desktop flows (permission/questions, packaging polish, installer validation) now that basic config editing exists and the Tauri frontend no longer depends on the HTTP bridge.
+2.  **Next slice:** decide whether to bring the same queued HITL behavior to the legacy Ink/TUI path or move directly into packaging polish and installer validation now that the desktop path has native config editing and native HITL answers.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

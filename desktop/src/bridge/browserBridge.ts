@@ -31,6 +31,9 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     async saveConfig() {
       return;
     },
+    async answerHitl() {
+      return;
+    },
     async listSessions() {
       return [...sessions.values()];
     },

@@ -48,6 +48,20 @@ export type DesktopEvent =
   | { type: "agent:token"; sessionId: string; token: string }
   | { type: "tool:start"; sessionId: string; toolName: string }
   | { type: "tool:end"; sessionId: string; toolName: string }
+  | {
+      type: "hitl:question";
+      sessionId: string;
+      id: string;
+      question: string;
+      options?: string[];
+    }
+  | {
+      type: "hitl:permission";
+      sessionId: string;
+      id: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    }
   | { type: "session:error"; sessionId: string; message: string }
   | { type: "session:completed"; sessionId: string };
 
@@ -55,6 +69,7 @@ export interface DesktopBridge {
   getStatus(): Promise<DesktopBridgeStatus>;
   loadConfig(): Promise<DesktopConfig>;
   saveConfig(config: DesktopConfig): Promise<void>;
+  answerHitl(id: string, answer: string): Promise<void>;
   listSessions(): Promise<DesktopSessionSnapshot[]>;
   startSession(): Promise<DesktopSessionSnapshot>;
   resumeSession(sessionId: string): Promise<DesktopSessionSnapshot>;

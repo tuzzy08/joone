@@ -67,7 +67,8 @@ body {
 .panel,
 .hero,
 .conversation,
-.composer {
+.composer,
+.hitl-card {
   border: 1px solid var(--line);
   border-radius: 20px;
   background: var(--panel);
@@ -76,7 +77,8 @@ body {
 
 .panel,
 .hero,
-.composer {
+.composer,
+.hitl-card {
   padding: 18px;
 }
 
@@ -98,6 +100,31 @@ body {
   flex-direction: column;
   gap: 12px;
   overflow: auto;
+}
+
+.hitl-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hitl-card p {
+  margin: 0;
+}
+
+.hitl-queue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hitl-queue span {
+  border: 1px solid rgba(33, 79, 122, 0.18);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(33, 79, 122, 0.08);
+  color: var(--accent-2);
+  font-size: 0.9rem;
 }
 
 .bubble {

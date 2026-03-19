@@ -3,10 +3,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { HITLBridge } from "../../src/hitl/bridge.js";
 import { JooneRuntimeService } from "../../src/runtime/service.js";
 import type {
   RuntimeHarness,
   RuntimeHarnessFactory,
+  RuntimeQuestionEvent,
   RuntimeSessionStartedEvent,
   RuntimeSessionStatusEvent,
   RuntimeEvent,
@@ -22,9 +24,11 @@ describe("JooneRuntimeService", () => {
 
   beforeEach(() => {
     fs.mkdirSync(tempRoot, { recursive: true });
+    HITLBridge.resetInstance();
   });
 
   afterEach(() => {
+    HITLBridge.resetInstance();
     fs.rmSync(tempRoot, { recursive: true, force: true });
   });
 
@@ -141,6 +145,40 @@ describe("JooneRuntimeService", () => {
 
     expect(destroyed).toBe(1);
   });
+
+  it("emits queueable HITL questions with ids and resolves multiple prompts in order", async () => {
+    const service = new JooneRuntimeService({
+      configPath,
+      cwd: tempRoot,
+      harnessFactory: makeHarnessFactoryWithQuestions(),
+    });
+
+    const session = await service.startSession();
+    const events: RuntimeEvent[] = [];
+    service.subscribe(session.sessionId, (event) => {
+      events.push(event);
+    });
+
+    const replyPromise = service.submitMessage(session.sessionId, "walk me through this");
+
+    const firstQuestion = await waitForQuestion(events, 0);
+    expect(firstQuestion.id).toBeTruthy();
+    expect(firstQuestion.question).toContain("First");
+
+    await service.answerHitl(firstQuestion.id, "alpha");
+
+    const secondQuestion = await waitForQuestion(events, 1);
+    expect(secondQuestion.id).toBeTruthy();
+    expect(secondQuestion.id).not.toBe(firstQuestion.id);
+    expect(secondQuestion.question).toContain("Second");
+
+    await service.answerHitl(secondQuestion.id, "beta");
+
+    const reply = await replyPromise;
+
+    expect(reply.messages.at(-1)?.content).toContain("alpha");
+    expect(reply.messages.at(-1)?.content).toContain("beta");
+  });
 });
 
 function makeHarnessFactory(onDestroy?: () => void): RuntimeHarnessFactory {
@@ -188,4 +226,63 @@ function makeHarnessFactory(onDestroy?: () => void): RuntimeHarnessFactory {
 
     return harness;
   };
+}
+
+function makeHarnessFactoryWithQuestions(): RuntimeHarnessFactory {
+  return async () => {
+    const harness: RuntimeHarness = {
+      sessionId: `runtime-session-${Date.now()}`,
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+      tracerSummary: {
+        totalTokens: 0,
+        cacheHitRate: 0,
+        toolCallCount: 0,
+        turnCount: 0,
+        totalCost: 0,
+      },
+      async *run(state) {
+        const bridge = HITLBridge.getInstance();
+        const first = await bridge.askUser("First clarification?", ["alpha", "beta"]);
+        const second = await bridge.askUser("Second clarification?");
+        yield {
+          event: "on_chain_end",
+          name: "LangGraph",
+          data: {
+            output: {
+              messages: [
+                ...state.conversationHistory,
+                new AIMessage(`Answers: ${first} / ${second}`),
+              ],
+            },
+          },
+        };
+      },
+      async save() {
+        return;
+      },
+      async destroy() {
+        return;
+      },
+    };
+
+    return harness;
+  };
+}
+
+async function waitForQuestion(
+  events: RuntimeEvent[],
+  index: number,
+): Promise<RuntimeQuestionEvent> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const questions = events.filter(
+      (event): event is RuntimeQuestionEvent => event.type === "hitl:question",
+    );
+    if (questions[index]) {
+      return questions[index];
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error(`Timed out waiting for question ${index + 1}`);
 }

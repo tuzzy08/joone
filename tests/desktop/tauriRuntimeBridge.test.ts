@@ -12,6 +12,7 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain('invoke<DesktopBridgeStatus>("runtime_status")');
     expect(source).toContain('invoke<DesktopConfig>("runtime_load_config")');
     expect(source).toContain('invoke("runtime_save_config"');
+    expect(source).toContain('invoke("runtime_answer_hitl"');
     expect(source).toContain(
       'invoke<DesktopSessionSnapshot[]>("runtime_list_sessions")',
     );
@@ -48,6 +49,7 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("runtime_status");
     expect(source).toContain("runtime_load_config");
     expect(source).toContain("runtime_save_config");
+    expect(source).toContain("runtime_answer_hitl");
     expect(source).toContain("runtime_list_sessions");
     expect(source).toContain("runtime_start_session");
     expect(source).toContain("runtime_resume_session");

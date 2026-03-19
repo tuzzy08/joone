@@ -89,6 +89,13 @@ struct SubmitMessageArgs {
     text: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnswerHitlArgs {
+    id: String,
+    answer: String,
+}
+
 #[tauri::command]
 fn runtime_base_url() -> String {
     std::env::var("JOONE_DESKTOP_RUNTIME_URL")
@@ -180,6 +187,14 @@ fn runtime_save_config(config: DesktopConfig) -> Result<(), String> {
     fs::write(config_path, serialized).map_err(|error| error.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+fn runtime_answer_hitl(args: AnswerHitlArgs) -> Result<(), String> {
+    runtime_post_no_content(
+        &format!("/hitl/{}/answer", args.id),
+        serde_json::json!({ "answer": args.answer }),
+    )
 }
 
 #[tauri::command]
@@ -379,6 +394,26 @@ fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
     runtime_post_with_body(path, serde_json::json!({}))
 }
 
+fn runtime_post_no_content(path: &str, body: serde_json::Value) -> Result<(), String> {
+    let base_url = runtime_base_url();
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .post(format!("{base_url}{path}"))
+        .json(&body)
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    Ok(())
+}
+
 fn runtime_delete(path: &str) -> Result<(), String> {
     let base_url = runtime_base_url();
     let client = reqwest::blocking::Client::builder()
@@ -437,6 +472,7 @@ fn main() {
             runtime_status,
             runtime_load_config,
             runtime_save_config,
+            runtime_answer_hitl,
             runtime_list_sessions,
             runtime_start_session,
             runtime_resume_session,

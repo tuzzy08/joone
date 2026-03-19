@@ -46,4 +46,18 @@ describe("Desktop UI shell", () => {
     expect(styles).toContain(".settings-row");
     expect(styles).toContain(".toggle-row");
   });
+
+  it("queues HITL prompts in the desktop shell and answers them through the bridge", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+
+    expect(source).toContain("pendingHitlPrompts");
+    expect(source).toContain("bridge.answerHitl");
+    expect(source).toContain('event.type === "hitl:question"');
+    expect(source).toContain('event.type === "hitl:permission"');
+    expect(source).toContain("Pending prompts:");
+    expect(source).toContain("Submit Answer");
+    expect(styles).toContain(".hitl-card");
+    expect(styles).toContain(".hitl-queue");
+  });
 });

@@ -36,6 +36,13 @@ export function createHttpDesktopBridge(baseUrl: string): DesktopBridge {
         body: JSON.stringify(config),
       });
     },
+    async answerHitl(id, answer) {
+      await fetch(`${baseUrl}/hitl/${id}/answer`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ answer }),
+      });
+    },
     async listSessions() {
       return getJson<DesktopSessionSnapshot[]>(`${baseUrl}/sessions`);
     },

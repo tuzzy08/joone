@@ -57,6 +57,7 @@ export class JooneRuntimeService {
         this.emit(sessionId, {
           type: "hitl:question",
           sessionId,
+          id: question.id,
           question: question.question,
           options: question.options,
         });
@@ -67,6 +68,7 @@ export class JooneRuntimeService {
         this.emit(sessionId, {
           type: "hitl:permission",
           sessionId,
+          id: permission.id,
           toolName: permission.toolName,
           args: permission.args,
         });
@@ -295,6 +297,10 @@ export class JooneRuntimeService {
       status: "closed",
     });
     this.sessions.delete(sessionId);
+  }
+
+  async answerHitl(id: string, answer: string): Promise<void> {
+    HITLBridge.getInstance().resolveAnswer(id, answer);
   }
 
   private emit(sessionId: string, event: RuntimeEvent): void {

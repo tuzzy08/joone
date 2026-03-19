@@ -163,4 +163,50 @@ describe("Desktop runtime server", () => {
       "content-type",
     );
   });
+
+  it("forwards HITL answers through the desktop runtime server", async () => {
+    const answers: Array<{ id: string; answer: string }> = [];
+    const server = await createDesktopRuntimeServer({
+      runtime: {
+        async loadConfig() {
+          return {};
+        },
+        async saveConfig() {
+          return;
+        },
+        async listSessions() {
+          return [];
+        },
+        async startSession() {
+          return {};
+        },
+        async resumeSession() {
+          return {};
+        },
+        async submitMessage() {
+          return {};
+        },
+        async answerHitl(id: string, answer: string) {
+          answers.push({ id, answer });
+        },
+        async closeSession() {
+          return;
+        },
+        subscribe() {
+          return () => {};
+        },
+      },
+    });
+
+    closers.push(server.close);
+
+    const response = await fetch(`${server.url}/hitl/hitl-q-1/answer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ answer: "approve" }),
+    });
+
+    expect(response.status).toBe(204);
+    expect(answers).toEqual([{ id: "hitl-q-1", answer: "approve" }]);
+  });
 });

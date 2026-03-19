@@ -19,6 +19,9 @@ export function createTauriDesktopBridge(): DesktopBridge {
     async saveConfig(config) {
       await invoke("runtime_save_config", { config });
     },
+    async answerHitl(id, answer) {
+      await invoke("runtime_answer_hitl", { id, answer });
+    },
     async listSessions() {
       return invoke<DesktopSessionSnapshot[]>("runtime_list_sessions");
     },

@@ -8,6 +8,20 @@ import type {
   DesktopSessionSnapshot,
 } from "./bridge/types";
 
+type PendingHitlPrompt =
+  | {
+      type: "question";
+      id: string;
+      question: string;
+      options?: string[];
+    }
+  | {
+      type: "permission";
+      id: string;
+      toolName: string;
+      args: Record<string, unknown>;
+    };
+
 export function App() {
   const bridge = useMemo<DesktopBridge>(() => getDesktopBridge(), []);
   const [config, setConfig] = useState<DesktopConfig | null>(null);
@@ -23,6 +37,9 @@ export function App() {
   const [activity, setActivity] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
   const [status, setStatus] = useState("Idle");
+  // Keep HITL prompts FIFO so a later question does not overwrite an earlier unanswered one.
+  const [pendingHitlPrompts, setPendingHitlPrompts] = useState<PendingHitlPrompt[]>([]);
+  const [hitlAnswer, setHitlAnswer] = useState("");
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
@@ -78,6 +95,32 @@ export function App() {
 
       if (event.type === "session:error") {
         reportError(new Error(event.message), "Runtime error");
+      }
+
+      if (event.type === "hitl:question") {
+        setPendingHitlPrompts((prev) => [
+          ...prev,
+          {
+            type: "question",
+            id: event.id,
+            question: event.question,
+            options: event.options,
+          },
+        ]);
+        setStatus("Awaiting input");
+      }
+
+      if (event.type === "hitl:permission") {
+        setPendingHitlPrompts((prev) => [
+          ...prev,
+          {
+            type: "permission",
+            id: event.id,
+            toolName: event.toolName,
+            args: event.args,
+          },
+        ]);
+        setStatus("Awaiting input");
       }
     });
   }, [activeSession, bridge]);
@@ -146,6 +189,7 @@ export function App() {
     (config.provider !== draftConfig.provider ||
       config.model !== draftConfig.model ||
       config.streaming !== draftConfig.streaming);
+  const activeHitlPrompt = pendingHitlPrompts[0];
 
   function updateDraftConfig(
     patch: Partial<DesktopConfig> | ((current: DesktopConfig) => DesktopConfig),
@@ -192,6 +236,23 @@ export function App() {
     setStatus("Error");
     setActivity((prev) => [`Error: ${nextError}`, ...prev].slice(0, 10));
   }
+
+  const submitHitlAnswer = async () => {
+    if (!activeHitlPrompt || !hitlAnswer.trim()) {
+      return;
+    }
+
+    await runAction(async () => {
+      await bridge.answerHitl(activeHitlPrompt.id, hitlAnswer.trim());
+      setPendingHitlPrompts((prev) => prev.slice(1));
+      setActivity((prev) => [
+        `Answered HITL prompt ${activeHitlPrompt.id}.`,
+        ...prev,
+      ].slice(0, 10));
+      setHitlAnswer("");
+      setStatus((pendingHitlPrompts.length > 1) ? "Awaiting input" : "Idle");
+    }, "Failed to answer HITL prompt");
+  };
 
   return (
     <div className="shell">
@@ -343,22 +404,74 @@ export function App() {
           )}
         </section>
 
-        <footer className="composer">
-          <input
-            className="input"
-            placeholder="What should we build today?"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                void submit();
-              }
-            }}
-          />
-          <button className="button" onClick={() => void submit()}>
-            Send
-          </button>
-        </footer>
+        {activeHitlPrompt ? (
+          <section className="hitl-card">
+            <strong>Human-in-the-loop</strong>
+            {activeHitlPrompt.type === "question" ? (
+              <>
+                <p>{activeHitlPrompt.question}</p>
+                {activeHitlPrompt.options?.length ? (
+                  <div className="hitl-queue">
+                    {activeHitlPrompt.options.map((option) => (
+                      <span key={option}>{option}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <p>Allow tool execution for `{activeHitlPrompt.toolName}`?</p>
+                <div className="hitl-queue">
+                  {Object.entries(activeHitlPrompt.args).map(([key, value]) => (
+                    <span key={key}>{`${key}: ${String(value)}`}</span>
+                  ))}
+                </div>
+              </>
+            )}
+            {pendingHitlPrompts.length > 1 ? (
+              <p>Pending prompts: {pendingHitlPrompts.length - 1}</p>
+            ) : null}
+            <div className="composer">
+              <input
+                className="input"
+                placeholder={
+                  activeHitlPrompt.type === "permission"
+                    ? "Type y / n or approve / reject"
+                    : "Type your answer"
+                }
+                value={hitlAnswer}
+                onChange={(event) => setHitlAnswer(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void submitHitlAnswer();
+                  }
+                }}
+              />
+              <button className="button" onClick={() => void submitHitlAnswer()}>
+                Submit Answer
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {!activeHitlPrompt ? (
+          <footer className="composer">
+            <input
+              className="input"
+              placeholder="What should we build today?"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void submit();
+                }
+              }}
+            />
+            <button className="button" onClick={() => void submit()}>
+              Send
+            </button>
+          </footer>
+        ) : null}
       </main>
     </div>
   );
@@ -423,6 +536,10 @@ function describeEvent(event: DesktopEvent): string {
       return `Tool ${event.toolName} finished`;
     case "agent:token":
       return `Streaming token: ${event.token}`;
+    case "hitl:question":
+      return `Question requested: ${event.question}`;
+    case "hitl:permission":
+      return `Permission requested for ${event.toolName}`;
     default:
       return event.type;
   }

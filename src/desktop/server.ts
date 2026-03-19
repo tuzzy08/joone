@@ -6,6 +6,7 @@ import type { RuntimeEvent } from "../runtime/types.js";
 interface RuntimeLike {
   loadConfig(): Promise<unknown>;
   saveConfig(config: unknown): Promise<void>;
+  answerHitl(id: string, answer: string): Promise<void>;
   listSessions(): Promise<unknown>;
   startSession(): Promise<unknown>;
   resumeSession(sessionId: string): Promise<unknown>;
@@ -58,6 +59,11 @@ export async function createDesktopRuntimeServer({
 
   app.post("/config", async (request: Request, response: Response) => {
     await runtime.saveConfig(request.body);
+    response.status(204).end();
+  });
+
+  app.post("/hitl/:id/answer", async (request: Request, response: Response) => {
+    await runtime.answerHitl(asValue(request.params.id), request.body.answer ?? "");
     response.status(204).end();
   });
 
@@ -129,6 +135,14 @@ export async function createDesktopRuntimeServer({
 }
 
 function asSessionId(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+
+  return value ?? "";
+}
+
+function asValue(value: string | string[] | undefined): string {
   if (Array.isArray(value)) {
     return value[0] ?? "";
   }
