@@ -15,20 +15,23 @@
 
 body {
   margin: 0;
+  height: 100vh;
   font-family: "Segoe UI", sans-serif;
   color: var(--text);
   background:
     radial-gradient(circle at top left, rgba(180, 90, 42, 0.18), transparent 32%),
     radial-gradient(circle at bottom right, rgba(33, 79, 122, 0.16), transparent 28%),
     var(--bg);
+  overflow: hidden;
 }
 
 .shell {
   display: grid;
   grid-template-columns: 320px 1fr;
-  min-height: 100vh;
+  height: 100vh;
   gap: 20px;
   padding: 20px;
+  overflow: hidden;
 }
 
 .toast-stack {
@@ -62,6 +65,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+}
+
+.sidebar {
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .panel,
@@ -91,10 +100,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .conversation {
   flex: 1;
+  min-height: 0;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -148,6 +159,7 @@ body {
 .composer {
   display: flex;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .session-list,

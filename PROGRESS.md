@@ -576,3 +576,16 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 - Verification completed:
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-19: Desktop Composer Viewport Fix
+
+- Refined the desktop layout so the main composer stays in the viewport even when the conversation history gets long.
+- Updated `desktop/src/styles.css` to:
+  - lock the app shell to the viewport height
+  - make the sidebar and main column honor `min-height: 0`
+  - keep the conversation pane as the scroll container
+  - keep the hero and composer from shrinking away
+- No regression was added for this UI/layout refactor per user request.
+- Verification completed:
+  - `npm run build`
+  - `npm run desktop:web:build`
