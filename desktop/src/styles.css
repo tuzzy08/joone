@@ -175,6 +175,11 @@ body {
   font-size: 0.92rem;
 }
 
+.settings-hint {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .toggle-row {
   display: flex;
   align-items: center;
@@ -202,6 +207,11 @@ body {
   border-radius: 14px;
   background: #fffdf9;
   padding: 14px 16px;
+}
+
+.select-input {
+  appearance: none;
+  cursor: pointer;
 }
 
 .button {

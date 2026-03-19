@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getDesktopBridge } from "./bridge";
+import {
+  PROVIDER_MODELS,
+  SUPPORTED_PROVIDERS,
+} from "../../src/desktop/providerCatalog.js";
 import type {
   DesktopBridge,
   DesktopBridgeStatus,
@@ -189,6 +193,10 @@ export function App() {
     (config.provider !== draftConfig.provider ||
       config.model !== draftConfig.model ||
       config.streaming !== draftConfig.streaming);
+  const providerOptions = SUPPORTED_PROVIDERS;
+  const availableModels = draftConfig
+    ? PROVIDER_MODELS[draftConfig.provider] ?? []
+    : [];
   const activeHitlPrompt = pendingHitlPrompts[0];
 
   function updateDraftConfig(
@@ -200,6 +208,22 @@ export function App() {
       }
 
       return typeof patch === "function" ? patch(current) : { ...current, ...patch };
+    });
+  }
+
+  function syncDraftProvider(provider: string) {
+    updateDraftConfig((current) => {
+      const nextModels = PROVIDER_MODELS[provider] ?? [];
+      const fallbackModel = nextModels[0]?.value ?? current.model;
+      const hasCurrentModel = nextModels.some(
+        (modelOption) => modelOption.value === current.model,
+      );
+
+      return {
+        ...current,
+        provider,
+        model: hasCurrentModel ? current.model : fallbackModel,
+      };
     });
   }
 
@@ -296,24 +320,43 @@ export function App() {
             <div className="settings-form">
               <label className="settings-row">
                 <span>Provider</span>
-                <input
-                  className="input"
+                <select
+                  className="input select-input"
                   value={draftConfig.provider}
-                  onChange={(event) => updateDraftConfig({
-                    provider: event.target.value,
-                  })}
-                />
+                  onChange={(event) => syncDraftProvider(event.target.value)}
+                >
+                  {providerOptions.map((providerOption) => (
+                    <option key={providerOption.value} value={providerOption.value}>
+                      {providerOption.label}
+                    </option>
+                  ))}
+                </select>
+                <small className="settings-hint">
+                  {
+                    providerOptions.find(
+                      (providerOption) => providerOption.value === draftConfig.provider,
+                    )?.hint
+                  }
+                </small>
               </label>
 
               <label className="settings-row">
                 <span>Model</span>
-                <input
-                  className="input"
+                <select
+                  className="input select-input"
                   value={draftConfig.model}
-                  onChange={(event) => updateDraftConfig({
-                    model: event.target.value,
-                  })}
-                />
+                  onChange={(event) =>
+                    updateDraftConfig({
+                      model: event.target.value,
+                    })
+                  }
+                >
+                  {availableModels.map((modelOption) => (
+                    <option key={modelOption.value} value={modelOption.value}>
+                      {modelOption.label}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className="toggle-row">

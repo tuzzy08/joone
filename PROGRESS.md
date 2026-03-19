@@ -530,3 +530,17 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts`
   - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopScaffold.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/ui/hitlQueue.test.ts`
   - `npm run build`
+
+### 2026-03-19: Desktop Settings Catalog Alignment
+
+- Replaced the desktop settings provider/model free-text inputs with dropdowns backed by a shared provider catalog in `src/desktop/providerCatalog.ts`.
+- Moved the CLI onboarding provider/model lists onto the same shared catalog so the CLI and desktop app now present the same supported providers and preconfigured model options.
+- Updated `desktop/src/App.tsx` to:
+  - render provider and model as `<select>` controls
+  - show the selected provider hint in the settings panel
+  - keep config save behavior unchanged while preventing arbitrary unsupported values from being typed in the desktop UI
+- Added coverage in `tests/desktop/desktopUiShell.test.ts` to lock the dropdown-based settings contract and shared catalog usage.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

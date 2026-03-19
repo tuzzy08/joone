@@ -37,14 +37,25 @@ describe("Desktop UI shell", () => {
   it("adds a desktop settings editor wired to config save", () => {
     const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
     const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+    const catalog = fs.readFileSync(
+      path.resolve("src/desktop/providerCatalog.ts"),
+      "utf8",
+    );
 
     expect(source).toContain("draftConfig");
     expect(source).toContain("Save Settings");
     expect(source).toContain("bridge.saveConfig");
-    expect(source).toContain("onChange={(event) => updateDraftConfig(");
+    expect(source).toContain("<select");
+    expect(source).toContain("providerOptions.map");
+    expect(source).toContain("availableModels.map");
+    expect(source).toContain("syncDraftProvider");
+    expect(source).not.toContain('<input\n                  className="input"\n                  value={draftConfig.provider}');
+    expect(source).not.toContain('<input\n                  className="input"\n                  value={draftConfig.model}');
     expect(styles).toContain(".settings-form");
     expect(styles).toContain(".settings-row");
     expect(styles).toContain(".toggle-row");
+    expect(catalog).toContain("SUPPORTED_PROVIDERS");
+    expect(catalog).toContain("PROVIDER_MODELS");
   });
 
   it("queues HITL prompts in the desktop shell and answers them through the bridge", () => {
