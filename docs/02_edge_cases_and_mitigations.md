@@ -104,7 +104,7 @@ When building a coding agent with Prompt Caching + Middlewares, these are the pr
   - _Mitigation:_ `PermissionMiddleware` maintains a hardcoded `SAFE_TOOLS` whitelist (`read_file`, `search_skills`, `ask_user_question`, etc.) that bypasses approval even in `ask_all` mode.
 - **Multiple Pending HITL Prompts:**
   - _The Edge Case:_ The agent emits a second permission/question prompt before the user answers the first one. A UI that only stores one active prompt can overwrite the older pending request, leaving the unresolved resolver stuck and the session effectively blocked.
-  - _Mitigation:_ HITL events must carry stable prompt IDs, answer submission must round-trip those IDs, and the UI should maintain a FIFO queue of pending prompts rather than a single mutable slot. The desktop shell now follows this model.
+  - _Mitigation:_ HITL events must carry stable prompt IDs, answer submission must round-trip those IDs, and the UI should maintain a FIFO queue of pending prompts rather than a single mutable slot. Both the desktop shell and the legacy Ink/TUI now follow this model.
 
 ## 7. Skills Sync Edge Cases
 

@@ -486,3 +486,15 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-19: HITL Queue Parity - Legacy Ink/TUI
+
+- Brought the same FIFO HITL queue behavior to the legacy Ink/TUI path so it no longer overwrites older pending prompts when a second question or permission request arrives before the first is answered.
+- Updated `src/ui/App.tsx` to replace the separate `hitlQuestion` and `hitlPermission` slots with a single `pendingHitlPrompts` queue keyed by stable prompt IDs.
+- The TUI now appends incoming questions and permissions in order and removes only the answered prompt via `bridge.resolveAnswer(id, answer)`, matching the safer desktop behavior.
+- Updated `src/ui/components/HITLPrompt.tsx` to surface queue depth via `Pending prompts: N` while still rendering the active prompt inline in the input area.
+- Added a focused regression in `tests/ui/hitlQueue.test.ts` first, then implemented the minimum TUI changes to make it pass.
+- Verification completed:
+  - `npm test -- tests/ui/hitlQueue.test.ts`
+  - `npm test -- tests/ui/hitlQueue.test.ts tests/ui/appLifecycle.test.ts tests/runtime/runtimeService.test.ts`
+  - `npm run build`

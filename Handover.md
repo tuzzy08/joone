@@ -143,7 +143,7 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - The eighteenth M20 slice moves Tauri config save off the frontend HTTP bridge too. `desktop/src/bridge/tauriBridge.ts` now calls native `runtime_save_config`, and `src-tauri/src/main.rs` updates `~/.joone/config.json` directly while preserving unrelated settings. The Tauri desktop frontend no longer depends on the HTTP bridge at all; only the Rust shell talks to the runtime URL during Tauri runs.
 - The nineteenth M20 slice surfaces native config save in the actual desktop UI. `desktop/src/App.tsx` now includes a settings panel with editable provider/model/streaming controls, a dirty-checking `Save Settings` button, and activity feedback after a successful save. This is the first real desktop-side configuration UX on top of the native Tauri config commands.
 - The twentieth M20 slice adds desktop HITL answer UX and fixes the multi-question desktop edge case. Runtime HITL events now carry stable IDs, `JooneRuntimeService` exposes `answerHitl(id, answer)`, both HTTP dev mode and Tauri mode can submit answers, and `desktop/src/App.tsx` now keeps a FIFO queue of pending HITL prompts instead of letting a later prompt overwrite an earlier unanswered one.
-- Important investigation result: the desktop path now handles multiple pending HITL prompts in order, but the older Ink/TUI path still keeps only one active `hitlQuestion` / `hitlPermission` in state. If multiple prompts can stack there before the first one is answered, the legacy TUI would still overwrite the older prompt. That remains a follow-up item outside the desktop slice.
+- A parity follow-up slice now brings the same FIFO HITL queue model to the legacy Ink/TUI path. `src/ui/App.tsx` normalizes queued questions and permissions into `pendingHitlPrompts`, removes only the answered prompt by stable ID, and `src/ui/components/HITLPrompt.tsx` surfaces `Pending prompts: N` so older queued requests are no longer overwritten there either.
 
 ### Tool Routing Summary
 
@@ -163,6 +163,6 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — wire the real Tauri command/event layer to `JooneRuntimeService` so the desktop shell stops using the browser fallback bridge and starts talking to the actual runtime end-to-end.
-2.  **Next slice:** decide whether to bring the same queued HITL behavior to the legacy Ink/TUI path or move directly into packaging polish and installer validation now that the desktop path has native config editing and native HITL answers.
+2.  **Next slice:** continue with desktop completion work now that both the desktop shell and the legacy Ink/TUI safely queue multiple HITL prompts; the main remaining choices are packaging polish, installer validation, and any remaining desktop UX gaps.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

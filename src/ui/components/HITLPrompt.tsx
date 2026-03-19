@@ -11,6 +11,7 @@ interface HITLPromptProps {
   /** The active HITL question or permission request. */
   question?: HITLQuestion;
   permission?: HITLPermissionRequest;
+  pendingCount?: number;
 }
 
 /**
@@ -22,6 +23,7 @@ interface HITLPromptProps {
 export const HITLPrompt: React.FC<HITLPromptProps> = ({
   question,
   permission,
+  pendingCount = 0,
 }) => {
   const [inputValue, setInputValue] = useState("");
 
@@ -46,6 +48,11 @@ export const HITLPrompt: React.FC<HITLPromptProps> = ({
         <Box marginLeft={2} marginBottom={1}>
           <Text>{question.question}</Text>
         </Box>
+        {pendingCount > 0 && (
+          <Box marginLeft={2} marginBottom={1}>
+            <Text dimColor>{`Pending prompts: ${pendingCount}`}</Text>
+          </Box>
+        )}
         {question.options && question.options.length > 0 && (
           <Box flexDirection="column" marginLeft={2} marginBottom={1}>
             {question.options.map((opt, i) => (
@@ -98,6 +105,11 @@ export const HITLPrompt: React.FC<HITLPromptProps> = ({
         <Box marginLeft={2} marginBottom={1}>
           <Text dimColor>{argsSummary}</Text>
         </Box>
+        {pendingCount > 0 && (
+          <Box marginLeft={2} marginBottom={1}>
+            <Text dimColor>{`Pending prompts: ${pendingCount}`}</Text>
+          </Box>
+        )}
         <Box>
           <Box marginRight={1}>
             <Text color="red" bold>

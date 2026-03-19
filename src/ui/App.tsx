@@ -45,6 +45,18 @@ interface AppProps {
   onStartupBenchmarkComplete?: () => void;
 }
 
+type PendingHitlPrompt =
+  | {
+      id: string;
+      type: "question";
+      question: HITLQuestion;
+    }
+  | {
+      id: string;
+      type: "permission";
+      permission: HITLPermissionRequest;
+    };
+
 export const App: React.FC<AppProps> = ({
   provider,
   model,
@@ -88,19 +100,24 @@ export const App: React.FC<AppProps> = ({
   const harnessPromiseRef = React.useRef<Promise<ExecutionHarness> | null>(null);
 
   // HITL State
-  const [hitlQuestion, setHitlQuestion] = useState<HITLQuestion | undefined>(
-    undefined,
-  );
-  const [hitlPermission, setHitlPermission] = useState<
-    HITLPermissionRequest | undefined
-  >(undefined);
+  const [pendingHitlPrompts, setPendingHitlPrompts] = useState<
+    PendingHitlPrompt[]
+  >([]);
 
   // Listen for HITL events from the bridge
   useEffect(() => {
     const bridge = HITLBridge.getInstance();
 
-    const onQuestion = (q: HITLQuestion) => setHitlQuestion(q);
-    const onPermission = (p: HITLPermissionRequest) => setHitlPermission(p);
+    const onQuestion = (question: HITLQuestion) =>
+      setPendingHitlPrompts((prev) => [
+        ...prev,
+        { id: question.id, type: "question", question },
+      ]);
+    const onPermission = (permission: HITLPermissionRequest) =>
+      setPendingHitlPrompts((prev) => [
+        ...prev,
+        { id: permission.id, type: "permission", permission },
+      ]);
 
     bridge.on("question", onQuestion);
     bridge.on("permission", onPermission);
@@ -109,8 +126,7 @@ export const App: React.FC<AppProps> = ({
     const origResolve = bridge.resolveAnswer.bind(bridge);
     bridge.resolveAnswer = (id: string, answer: string) => {
       origResolve(id, answer);
-      setHitlQuestion(undefined);
-      setHitlPermission(undefined);
+      setPendingHitlPrompts((prev) => prev.filter((prompt) => prompt.id !== id));
     };
 
     return () => {
@@ -498,6 +514,14 @@ export const App: React.FC<AppProps> = ({
         totalCost: 0,
       };
   const contextTokens = countMessageTokens(contextState.conversationHistory);
+  const activeHitlPrompt = pendingHitlPrompts[0];
+  const activeHitlQuestion =
+    activeHitlPrompt?.type === "question" ? activeHitlPrompt.question : undefined;
+  const activeHitlPermission =
+    activeHitlPrompt?.type === "permission"
+      ? activeHitlPrompt.permission
+      : undefined;
+  const hasActiveHitlPrompt = Boolean(activeHitlPrompt);
 
   return (
     <Box flexDirection="column" minHeight={15}>
@@ -537,11 +561,15 @@ export const App: React.FC<AppProps> = ({
           )}
 
           {/* Interactive Prompt Area */}
-          {(hitlQuestion || hitlPermission) && (
-            <HITLPrompt question={hitlQuestion} permission={hitlPermission} />
+          {hasActiveHitlPrompt && (
+            <HITLPrompt
+              question={activeHitlQuestion}
+              permission={activeHitlPermission}
+              pendingCount={Math.max(pendingHitlPrompts.length - 1, 0)}
+            />
           )}
 
-          {!benchmarkStartup && !isProcessing && !hitlQuestion && !hitlPermission && (
+          {!benchmarkStartup && !isProcessing && !hasActiveHitlPrompt && (
             <Box paddingX={1} marginBottom={1}>
               <Box marginRight={1}>
                 <Text color="green" bold>
@@ -560,8 +588,7 @@ export const App: React.FC<AppProps> = ({
           {isProcessing &&
             !isStreaming &&
             !activeToolCall &&
-            !hitlQuestion &&
-            !hitlPermission && (
+            !hasActiveHitlPrompt && (
               <Box paddingX={1} marginBottom={1}>
                 <Text dimColor>
                   {isInitializingHarness ? "Initializing agent..." : "Thinking..."}
