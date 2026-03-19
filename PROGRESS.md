@@ -590,3 +590,25 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 - Verification completed:
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-19: Desktop + TUI Workstream UI Polish
+
+- Added a richer shared "workstream" presentation layer for live agent activity in both clients instead of relying on plain status strings.
+- Updated `desktop/src/bridge/types.ts` so desktop runtime events now carry the full tool-call payload needed by the UI:
+  - `session:status`
+  - `tool:start.args`
+  - `tool:end.result` and optional `tool:end.args`
+- Updated the browser bridge in `desktop/src/bridge/browserBridge.ts` to emit mock tool/status events too, so the local fallback path still exercises the richer UI.
+- Reworked `desktop/src/App.tsx` and `desktop/src/styles.css` so the desktop conversation pane now includes:
+  - a live todo/progress card for the current request
+  - richer tool-call cards with running/completed/error badges
+  - compact argument chips and summarized tool results
+  - active-session highlighting in the session list
+- Reworked the Ink/TUI in `src/ui/App.tsx` to use the same mental model:
+  - a dedicated `WorkflowTodoPanel` component in `src/ui/components/WorkflowTodoPanel.tsx`
+  - upgraded tool-call cards in `src/ui/components/ToolCallPanel.tsx`
+  - reduced tool-event spam in system messages now that tool state has a first-class UI
+- No new regression tests were added for this mostly presentational slice per user request; verification stayed at build-level checks.
+- Verification completed:
+  - `npm run build`
+  - `npm run desktop:web:build`

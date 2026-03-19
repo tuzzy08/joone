@@ -18,7 +18,7 @@ At a high level:
 2. The client talks to the shared runtime service
 3. The runtime prepares config, session state, and `ExecutionHarness`
 4. The harness runs the Deep Agent loop and emits stream/tool/status events
-5. The client renders those events as chat, metrics, and activity
+5. The client renders those events as chat, metrics, activity, and live workstream UI (tool cards, todo/progress blocks, HITL prompts)
 
 For the desktop path, there are currently three frontend/runtime modes:
 
@@ -168,6 +168,7 @@ The normalized runtime event surface now targets both CLI and desktop consumers:
 
 - `session:started`
 - `session:state`
+- `session:status`
 - `agent:token`
 - `tool:start`
 - `tool:end`
@@ -177,6 +178,7 @@ The normalized runtime event surface now targets both CLI and desktop consumers:
 - `session:completed`
 
 This event model is the architectural seam that allows the same runtime to power multiple clients.
+It now also drives the richer "workstream" presentation used by both the desktop shell and the Ink/TUI client, so tool execution and request progress can be rendered consistently across clients instead of being flattened into plain log strings.
 
 ## Current State vs End State
 
@@ -189,6 +191,7 @@ This event model is the architectural seam that allows the same runtime to power
 - browser fallback exists for UI-only work
 - Tauri production command/event wiring now covers startup, session lifecycle, message submission, live runtime event subscription, and session close
 - Tauri production command/event wiring now also covers config save; the remaining M20 work is primarily UX completion and packaging
+- both desktop and CLI now share a similar workstream UI model for live tool calls and request progress, built on the normalized runtime event surface
 
 ### End state for Milestone 20
 
