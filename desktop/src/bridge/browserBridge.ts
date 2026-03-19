@@ -55,6 +55,10 @@ export function createBrowserDesktopBridge(): DesktopBridge {
       const current = sessions.get(sessionId) ?? createSession(sessionId);
       const next: DesktopSessionSnapshot = {
         ...current,
+        description: describeBrowserSession([
+          ...current.messages,
+          { role: "user", content: text },
+        ]),
         messages: [
           ...current.messages,
           { role: "user", content: text },
@@ -103,6 +107,7 @@ function createSession(sessionId = `desktop-${Date.now()}`): DesktopSessionSnaps
     sessionId,
     provider: DEFAULT_CONFIG.provider,
     model: DEFAULT_CONFIG.model,
+    description: "Untitled session",
     messages: [
       {
         role: "system",
@@ -132,4 +137,15 @@ function emit(
   for (const listener of bucket) {
     listener(event);
   }
+}
+
+function describeBrowserSession(
+  messages: DesktopSessionSnapshot["messages"],
+): string {
+  const firstUserMessage = messages.find((message) => message.role === "user");
+  if (!firstUserMessage) {
+    return "Untitled session";
+  }
+
+  return firstUserMessage.content.trim().slice(0, 80) || "Untitled session";
 }

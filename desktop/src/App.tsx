@@ -12,6 +12,8 @@ import type {
   DesktopSessionSnapshot,
 } from "./bridge/types";
 
+const INITIAL_VISIBLE_SESSIONS = 4;
+
 type PendingHitlPrompt =
   | {
       type: "question";
@@ -34,6 +36,7 @@ export function App() {
     null,
   );
   const [sessions, setSessions] = useState<DesktopSessionSnapshot[]>([]);
+  const [showAllSessions, setShowAllSessions] = useState(false);
   const [activeSession, setActiveSession] = useState<DesktopSessionSnapshot | null>(
     null,
   );
@@ -197,6 +200,9 @@ export function App() {
   const availableModels = draftConfig
     ? PROVIDER_MODELS[draftConfig.provider] ?? []
     : [];
+  const visibleSessions = showAllSessions
+    ? sessions
+    : sessions.slice(0, INITIAL_VISIBLE_SESSIONS);
   const activeHitlPrompt = pendingHitlPrompts[0];
 
   function updateDraftConfig(
@@ -389,16 +395,29 @@ export function App() {
             {sessions.length === 0 ? (
               <p>No saved sessions yet.</p>
             ) : (
-              sessions.map((session) => (
-                <button
-                  key={session.sessionId}
-                  className="session-item"
-                  onClick={() => void resumeSession(session.sessionId)}
-                >
-                  <strong>{session.sessionId}</strong>
-                  <span>{session.messages[0]?.content ?? "Empty session"}</span>
-                </button>
-              ))
+              <>
+                {visibleSessions.map((session) => (
+                  <button
+                    key={session.sessionId}
+                    className="session-item"
+                    onClick={() => void resumeSession(session.sessionId)}
+                  >
+                    <strong>{describeSession(session)}</strong>
+                    <span className="session-meta">{session.sessionId}</span>
+                    <span>{session.description ?? describeSession(session)}</span>
+                  </button>
+                ))}
+                {sessions.length > INITIAL_VISIBLE_SESSIONS ? (
+                  <button
+                    className="ghost-button session-toggle"
+                    onClick={() => setShowAllSessions((current) => !current)}
+                  >
+                    {showAllSessions
+                      ? "Show fewer"
+                      : `View more (${sessions.length - INITIAL_VISIBLE_SESSIONS})`}
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
         </section>
@@ -554,6 +573,7 @@ function upsertSession(
 function normalizeSession(session: DesktopSessionSnapshot): DesktopSessionSnapshot {
   return {
     ...session,
+    description: session.description ?? describeSession(session),
     messages: Array.isArray(session.messages) ? session.messages : [],
     metrics: session.metrics ?? {
       totalTokens: 0,
@@ -563,6 +583,21 @@ function normalizeSession(session: DesktopSessionSnapshot): DesktopSessionSnapsh
       totalCost: 0,
     },
   };
+}
+
+function describeSession(session: DesktopSessionSnapshot): string {
+  const candidate =
+    session.description ??
+    session.messages.find((message) => message.role === "user")?.content ??
+    session.messages.find((message) => message.role === "agent")?.content ??
+    "Untitled session";
+
+  const normalized = candidate.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "Untitled session";
+  }
+
+  return normalized.length > 72 ? `${normalized.slice(0, 69)}...` : normalized;
 }
 
 function describeEvent(event: DesktopEvent): string {

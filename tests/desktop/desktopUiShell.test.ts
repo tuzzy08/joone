@@ -71,4 +71,25 @@ describe("Desktop UI shell", () => {
     expect(styles).toContain(".hitl-card");
     expect(styles).toContain(".hitl-queue");
   });
+
+  it("keeps the sessions list compact and uses conversation-derived labels", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+    const bridgeTypes = fs.readFileSync(
+      path.resolve("desktop/src/bridge/types.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("const INITIAL_VISIBLE_SESSIONS = 4");
+    expect(source).toContain("setShowAllSessions");
+    expect(source).toContain("visibleSessions");
+    expect(source).toContain("sessions.slice(0, INITIAL_VISIBLE_SESSIONS)");
+    expect(source).toContain("View more");
+    expect(source).toContain("Show fewer");
+    expect(source).toContain("describeSession(session)");
+    expect(source).toContain("session.description");
+    expect(styles).toContain(".session-meta");
+    expect(styles).toContain(".session-toggle");
+    expect(bridgeTypes).toContain("description?: string;");
+  });
 });

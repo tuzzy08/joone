@@ -128,6 +128,7 @@ describe("JooneRuntimeService", () => {
     expect(Array.isArray(listed?.messages)).toBe(true);
     expect(listed?.messages.length).toBeGreaterThan(0);
     expect(listed?.metrics.totalTokens).toBeTypeOf("number");
+    expect(listed?.description).toContain("persisted desktop preview");
   });
 
   it("cleans up runtime resources when a session closes", async () => {

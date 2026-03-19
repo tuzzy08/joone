@@ -201,6 +201,16 @@ body {
   font-size: 0.92rem;
 }
 
+.session-meta {
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.session-toggle {
+  width: 100%;
+}
+
 .input {
   flex: 1;
   border: 1px solid var(--line);

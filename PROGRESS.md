@@ -544,3 +544,22 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-19: Desktop Session List Compaction and Naming
+
+- Made the desktop sessions panel more manageable by default in `desktop/src/App.tsx`.
+- The UI now:
+  - shows only the first four saved sessions initially
+  - exposes `View more` / `Show fewer` to expand or collapse the list
+  - renders a conversation-derived label for each session instead of relying on the raw session id
+  - keeps the session id as secondary metadata for precise identification when needed
+- Extended the desktop bridge session contract with `description?: string` and updated the browser bridge to populate it for local mock sessions.
+- Updated `src-tauri/src/main.rs` so native Tauri session snapshots also include the persisted session description from the JSONL header, keeping native mode aligned with the shared runtime/HTTP paths.
+- Extended tests first:
+  - `tests/desktop/desktopUiShell.test.ts` now locks the compact session list and naming contract
+  - `tests/runtime/runtimeService.test.ts` now asserts that persisted desktop session snapshots include the conversation-derived description
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts tests/runtime/runtimeService.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`

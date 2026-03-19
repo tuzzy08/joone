@@ -28,6 +28,7 @@ export interface DesktopSessionSnapshot {
   sessionId: string;
   provider: string;
   model: string;
+  description?: string;
   messages: DesktopMessage[];
   metrics: DesktopMetrics;
 }

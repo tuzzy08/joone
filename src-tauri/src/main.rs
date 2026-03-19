@@ -52,6 +52,7 @@ struct DesktopSessionSnapshot {
     session_id: String,
     provider: String,
     model: String,
+    description: Option<String>,
     messages: Vec<DesktopMessage>,
     metrics: DesktopMetrics,
 }
@@ -64,6 +65,7 @@ struct SessionHeader {
     last_saved_at: u64,
     provider: String,
     model: String,
+    description: Option<String>,
 }
 
 struct PersistedSessionSnapshot {
@@ -322,6 +324,7 @@ fn read_session_snapshot(path: &PathBuf) -> Option<PersistedSessionSnapshot> {
             session_id: header.session_id,
             provider: header.provider,
             model: header.model,
+            description: header.description,
             messages,
             metrics: DesktopMetrics {
                 total_tokens: 0,
