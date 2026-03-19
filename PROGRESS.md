@@ -585,6 +585,7 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - make the sidebar and main column honor `min-height: 0`
   - keep the conversation pane as the scroll container
   - keep the hero and composer from shrinking away
+- Tightened the same layout further so the shell itself no longer scrolls and the message history is constrained to the conversation pane, which keeps the composer visible without having to page-scroll back down.
 - No regression was added for this UI/layout refactor per user request.
 - Verification completed:
   - `npm run build`
