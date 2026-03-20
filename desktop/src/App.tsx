@@ -77,6 +77,8 @@ export function App() {
     Record<string, SessionWorkstream>
   >({});
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
+  const conversationRef = useRef<HTMLElement | null>(null);
+  const composerInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void runAction(
@@ -324,6 +326,23 @@ export function App() {
     : emptyWorkstream();
   const activeProgress = getTodoProgress(activeWorkstream.todos);
 
+  useEffect(() => {
+    scrollToConversationEnd();
+  }, [
+    activeSession?.sessionId,
+    activeSession?.messages.length,
+    activeWorkstream.toolRuns.length,
+    activeWorkstream.todos.length,
+  ]);
+
+  useEffect(() => {
+    if (activeHitlPrompt || resumingSessionId) {
+      return;
+    }
+
+    focusComposer();
+  }, [activeHitlPrompt, resumingSessionId, activeSession?.sessionId]);
+
   function ensureSessionWorkstream(sessionId: string) {
     setSessionWorkstreams((current) => {
       if (current[sessionId]) {
@@ -373,6 +392,35 @@ export function App() {
       ...current,
       [sessionId]: updater(current[sessionId] ?? emptyWorkstream()),
     }));
+  }
+
+  function scrollToConversationEnd() {
+    requestAnimationFrame(() => {
+      const container = conversationRef.current;
+      if (!container) {
+        return;
+      }
+
+      const latestEntry = container.lastElementChild as HTMLElement | null;
+      if (latestEntry) {
+        latestEntry.scrollIntoView({
+          block: "end",
+          behavior: "smooth",
+        });
+        return;
+      }
+
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+  }
+
+  function focusComposer() {
+    requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+    });
   }
 
   async function runAction(action: () => Promise<void>, context: string) {
@@ -626,7 +674,7 @@ export function App() {
           </button>
         </header>
 
-        <section className="conversation">
+        <section className="conversation" ref={conversationRef}>
           {(activeSession?.messages ?? []).length === 0 ? (
             <article className="bubble bubble-system">
               Start or resume a session to begin using the desktop client.
@@ -755,6 +803,7 @@ export function App() {
         {!activeHitlPrompt ? (
           <footer className="composer">
             <input
+              ref={composerInputRef}
               className="input"
               placeholder="What should we build today?"
               value={input}

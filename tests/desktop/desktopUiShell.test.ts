@@ -90,4 +90,16 @@ describe("Desktop UI shell", () => {
     expect(styles).toContain(".session-time");
     expect(styles).toContain(".session-badge");
   });
+
+  it("restores focus and scroll position after resuming a session", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+
+    expect(source).toContain("conversationRef");
+    expect(source).toContain("composerInputRef");
+    expect(source).toContain("scrollToConversationEnd");
+    expect(source).toContain("focusComposer");
+    expect(source).toContain('behavior: "smooth"');
+    expect(source).toContain("requestAnimationFrame(() =>");
+    expect(source).toContain("composerInputRef.current?.focus()");
+  });
 });
