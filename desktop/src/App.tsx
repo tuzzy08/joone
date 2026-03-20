@@ -325,6 +325,22 @@ export function App() {
     ? sessionWorkstreams[activeSession.sessionId] ?? emptyWorkstream()
     : emptyWorkstream();
   const activeProgress = getTodoProgress(activeWorkstream.todos);
+  const isRestoringSession = Boolean(
+    resumingSessionId && activeSession?.sessionId !== resumingSessionId,
+  );
+  const hasActiveMessages = (activeSession?.messages ?? []).length > 0;
+  const heroKicker = isRestoringSession
+    ? "Restoring saved thread"
+    : activeSession
+      ? "Resumed thread"
+      : "Ready for a new session";
+  const heroDescription = isRestoringSession
+    ? "Loading the saved conversation so you land back on the latest message."
+    : activeSession
+      ? `${describeSession(activeSession)} · Last saved ${formatSessionTimestamp(
+          activeSession.lastSavedAt,
+        )}`
+      : "Shared-runtime desktop shell with browser fallback and Tauri adapter.";
 
   useEffect(() => {
     scrollToConversationEnd();
@@ -666,8 +682,9 @@ export function App() {
       <main className="main">
         <header className="hero">
           <div>
+            <span className="hero-kicker">{heroKicker}</span>
             <h1>Joone Desktop</h1>
-            <p>Shared-runtime desktop shell with browser fallback and Tauri adapter.</p>
+            <p>{heroDescription}</p>
           </div>
           <button className="button" onClick={() => void startSession()}>
             Start Session
@@ -675,9 +692,20 @@ export function App() {
         </header>
 
         <section className="conversation" ref={conversationRef}>
-          {(activeSession?.messages ?? []).length === 0 ? (
-            <article className="bubble bubble-system">
-              Start or resume a session to begin using the desktop client.
+          {isRestoringSession ? (
+            <article className="conversation-state conversation-state--loading">
+              <strong>Restoring session conversation...</strong>
+              <p>We&apos;re loading the saved thread and bringing you back to the latest message.</p>
+            </article>
+          ) : !activeSession ? (
+            <article className="conversation-state">
+              <strong>Pick up where you left off</strong>
+              <p>Start a new session or resume one from the sidebar to continue coding.</p>
+            </article>
+          ) : !hasActiveMessages ? (
+            <article className="conversation-state">
+              <strong>This session is ready for the next message.</strong>
+              <p>The thread is open, but there are no saved conversation turns yet.</p>
             </article>
           ) : (
             activeSession?.messages.map((message, index) => (

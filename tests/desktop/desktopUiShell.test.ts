@@ -102,4 +102,19 @@ describe("Desktop UI shell", () => {
     expect(source).toContain("requestAnimationFrame(() =>");
     expect(source).toContain("composerInputRef.current?.focus()");
   });
+
+  it("shows explicit restore and empty-session states in the conversation pane", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+
+    expect(source).toContain("isRestoringSession");
+    expect(source).toContain("conversation-state");
+    expect(source).toContain("Restoring session conversation...");
+    expect(source).toContain("Pick up where you left off");
+    expect(source).toContain("This session is ready for the next message.");
+    expect(source).toContain("hero-kicker");
+    expect(styles).toContain(".conversation-state");
+    expect(styles).toContain(".conversation-state--loading");
+    expect(styles).toContain(".hero-kicker");
+  });
 });

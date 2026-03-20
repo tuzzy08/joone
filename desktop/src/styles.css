@@ -103,6 +103,16 @@ body {
   flex-shrink: 0;
 }
 
+.hero-kicker {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .conversation {
   flex: 1;
   min-height: 0;
@@ -111,6 +121,30 @@ body {
   flex-direction: column;
   gap: 12px;
   overflow: auto;
+}
+
+.conversation-state {
+  width: min(82%, 720px);
+  border: 1px dashed rgba(33, 79, 122, 0.24);
+  border-radius: 18px;
+  background: rgba(248, 251, 255, 0.8);
+  padding: 18px;
+}
+
+.conversation-state strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.conversation-state p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.conversation-state--loading {
+  border-style: solid;
+  border-color: rgba(180, 90, 42, 0.24);
+  background: rgba(255, 246, 238, 0.92);
 }
 
 .hitl-card {
@@ -522,7 +556,8 @@ body {
   }
 
   .bubble,
-  .work-card {
+  .work-card,
+  .conversation-state {
     width: 100%;
     max-width: none;
   }
