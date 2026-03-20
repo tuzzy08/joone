@@ -14,7 +14,7 @@ describe("Desktop packaging workflow", () => {
     expect(source).toContain("windows-latest");
     expect(source).toContain("ubuntu-22.04");
     expect(source).toContain("macos-latest");
-    expect(source).toContain("tauri-apps/tauri-action@v1");
+    expect(source).toContain("tauri-apps/tauri-action@v0");
     expect(source).toContain("npm ci");
     expect(source).toContain("npm run build");
     expect(source).toContain("libwebkit2gtk-4.1-dev");
