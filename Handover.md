@@ -159,6 +159,13 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - `src/desktop/cliEntry.ts` now centralizes direct-execution detection so `releaseMetadata`, `validateBundles`, `smokeTestBundles`, and the release-pruning helper all execute correctly on both Windows and POSIX runners. This is important because those scripts can otherwise exit successfully while doing nothing, which hides CI bugs.
 - The latest release-polish slice adds `src/desktop/pruneReleaseAssets.ts`, which removes legacy non-canonical asset names from the target release before the canonical desktop upload runs. That keeps `joone-desktop-v0.1.0` from accumulating duplicate `.dmg`, `.AppImage`, and `.msi` names across workflow iterations.
 - One important implementation note: the prune helper deletes assets by **name**, not by the `id` field returned from `gh release view --json assets`. Hosted CI showed that feeding that JSON `id` back into `gh release delete-asset` can fail with "asset not found" even though the asset is present.
+- `README.md` now documents the actual install surfaces that exist today:
+  - CLI via `npx joone@latest start`
+  - global CLI install via npm
+  - packaged desktop installers from GitHub Releases
+  - desktop web-shell dev mode
+  - real Tauri desktop dev/build from source
+- The README also now calls out the current maturity split clearly: packaged desktop builds are available and CI-validated, but the CLI is still the more battle-tested interface until manual packaged-app smoke testing is finished.
 - The latest desktop/TUI UX slice introduces a shared workstream presentation model on top of the existing runtime event stream. `desktop/src/App.tsx` now renders live todo/progress cards plus richer tool-call cards in the conversation pane, and the Ink client in `src/ui/App.tsx` mirrors the same structure via `src/ui/components/WorkflowTodoPanel.tsx` and the upgraded `ToolCallPanel`.
 - `desktop/src/bridge/types.ts` now carries the extra tool/status event fields those surfaces need (`session:status`, `tool:start.args`, `tool:end.result`, optional `tool:end.args`), while the browser fallback bridge emits matching mock events so the local fallback path still exercises the richer workstream UI.
 - Tool activity is now intentionally de-emphasized in plain TUI system-message logs because tools have first-class UI panels in both clients. If future work adds more event categories, prefer surfacing them through the workstream model before adding more textual event spam.
@@ -185,6 +192,6 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — continue the post-foundation UX and packaging finish work now that the runtime boundary is native end-to-end.
-2.  **Next delivery slice:** inspect the next hosted run after the release-pruning change and confirm the GitHub release contains only the canonical asset names while the workflow artifacts still contain all three platform bundles, then continue with any remaining manual packaged-app smoke testing.
+2.  **Next delivery slice:** continue with manual packaged-app smoke testing now that the GitHub release contains only canonical desktop asset names and the workflow artifacts are stable across Windows, macOS, and Linux.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._

@@ -751,3 +751,15 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
 - Hosted CI then exposed one more GitHub CLI nuance: `gh release view --json assets` does not return the asset identifier shape expected by `gh release delete-asset` in this workflow. The prune helper now deletes by asset **name** instead of the JSON `id` field, which makes the cleanup step work consistently across runners.
+
+### 2026-03-20: Install Documentation Refresh
+
+- Rewrote `README.md` so the current install and run surfaces are explicit instead of scattered:
+  - CLI via `npx`
+  - global CLI install via `npm install -g joone`
+  - packaged desktop installers from GitHub Releases
+  - desktop web-shell dev mode
+  - real Tauri desktop dev/build from source
+- Added concrete OS-specific desktop install guidance for `.msi`, `.dmg`, and `.AppImage`.
+- Documented the current status accurately: desktop release packaging is available and CI-validated, while final manual packaged-app smoke testing is still pending.
+- This was a docs-only slice; no code or test behavior changed.

@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ Joone
+# Joone
 
 **An autonomous coding agent powered by prompt caching, harness engineering, and secure sandboxing.**
 
@@ -11,122 +11,228 @@
 
 ---
 
-**Joone** is a highly capable autonomous AI coding assistant that runs directly in your terminal. It leverages a hybrid environment: it has read/write access to your local project files for seamless editing, but all code execution, testing, and dependency installations happen securely inside an isolated cloud sandbox (powered by E2B).
+Joone is an autonomous AI coding assistant with two client surfaces:
 
-## ✨ Features
+- a stable CLI for day-to-day use
+- a Tauri desktop client with packaged installers and an active Milestone 20 polish track
 
-- **🧠 Pluggable Intelligence**: Seamlessly switch between Anthropic (Claude 3.5 Sonnet, Opus), OpenAI (GPT-4o, o1), Google (Gemini 1.5/pro), Mistral, Groq, local Ollama models, and more.
-- **🔌 User-Local Provider Plugins**: Heavy LLM SDKs (like `@langchain/google-genai`) are dynamically installed into `~/.joone/providers`. This keeps the base Joone installation incredibly lightweight while supporting every major AI provider.
-- **🛡️ Secure Execution Sandbox**: Joone cannot accidentally delete your local database or run malicious `npm install` scripts on your host machine. All execution happens in an isolated E2B cloud sandbox that syncs seamlessly with your local workspace.
-- **🖥️ Beautiful Terminal UI**: Built with React and Ink, Joone provides a rich, interactive TUI (Terminal User Interface) with spinners, syntax highlighting, and progress tracking.
-- **🪟 Desktop Client Foundation**: Milestone 20 is underway with a Tauri + React desktop scaffold that reuses a shared Node runtime service instead of forking the agent core.
-- **🔍 Deep Insights**: Integrated with LangSmith for comprehensive session tracing, token counting, and performance analysis.
-- **🔁 Agent Resilience**: Includes loop detection, command sanitization, backoff retries, and a human-in-the-loop (HITL) permission middleware (`auto`, `ask_dangerous`, `ask_all`).
+The agent edits your local project files directly, while command execution, testing, and dependency installation stay isolated behind the project's hybrid sandbox/runtime architecture.
 
----
+## Features
 
-## 🚀 Getting Started
+- Pluggable model/provider support across Anthropic, OpenAI, Google, Ollama, and more
+- User-local provider plugins so the base install stays lean
+- Hybrid host + sandbox execution for safer automation
+- Rich Ink TUI for the CLI and a Tauri + React desktop client
+- Persistent sessions, HITL prompts, slash commands, tracing, and desktop packaging CI
 
-## 🚀 Quickstart
+## Install Options
 
-The fastest way to experience Joone is to run it on-demand without installing anything globally. This will automatically trigger the onboarding wizard and launch your first session seamlessly:
+### 1. Run The CLI With `npx`
+
+This is the fastest way to try Joone without a global install:
 
 ```bash
 npx joone@latest start
 ```
 
-### Global Installation (Alternative)
+### 2. Install The CLI Globally
 
-If you prefer to install Joone globally:
+If you want `joone` available everywhere:
 
 ```bash
 npm install -g joone
 ```
 
-Once installed, simply run `joone` in any directory. If it's your first time, the configuration wizard will open automatically.
-
-### Desktop Client Status
-
-The desktop app is currently an in-progress Milestone 20 scaffold. The repository now includes:
-
-- a shared runtime service in `src/runtime/`
-- a desktop IPC bridge in `src/desktop/ipc.ts`
-- a Tauri shell in `src-tauri/`
-- a React desktop shell in `desktop/`
-
-The CLI remains the stable primary interface while the desktop client is wired up incrementally.
-
-### Desktop Packaging CI
-
-Cross-platform desktop bundle automation now lives in GitHub Actions via `.github/workflows/desktop-build.yml`.
-The workflow builds Tauri bundles on Windows, macOS, and Ubuntu, validates that the expected `.msi`, `.dmg`, or `.AppImage` output exists for each runner, and uploads the generated artifacts as workflow artifacts for installer smoke testing.
-
-### Configuration
-
-If you ever need to change your LLM provider, API keys, or models, run the configuration wizard:
-
-```bash
-joone config
-```
-
-To start an autonomous session in your current project directory:
+Then start the app in any project directory:
 
 ```bash
 joone start
 ```
 
-### Uninstallation
+If you need to change provider/model/API key settings later:
 
-Since Joone manages its own user-local plugins and settings, completely removing Joone from your system is a two-step process:
+```bash
+joone config
+```
 
-1. **Wipe User Data**: First, use Joone's built-in cleanup command to safely delete your configurations, traces, and dynamically installed LLM provider dependencies stored in `~/.joone`:
-   ```bash
-   joone cleanup
-   ```
-2. **Remove the App**: Next, uninstall the base package using the package manager you originally used:
-   ```bash
-   npm uninstall -g joone
-   # OR
-   brew uninstall joone
-   ```
+### 3. Install The Desktop App From GitHub Releases
 
----
+Packaged desktop builds are published on the project's GitHub Releases page:
 
-## 🛠️ Commands
+- Windows: `.msi`
+- macOS: `.dmg`
+- Linux: `.AppImage`
 
-| Command                        | Description                                                                     |
-| ------------------------------ | ------------------------------------------------------------------------------- |
-| `joone start`                  | Start a new Joone agent session in the current directory.                       |
-| `joone start --resume <id>`    | Resume a previously saved persistent session.                                   |
-| `joone config`                 | Run the configuration wizard (Providers, API Keys, etc.).                       |
-| `joone sessions`               | List all available persistent sessions for resumption.                          |
-| `joone provider add <name>`    | Manually download a dynamic LLM provider package (e.g., `google`, `anthropic`). |
-| `joone provider remove <name>` | Uninstall a provider package locally.                                           |
-| `joone analyze [sessionId]`    | Analyze a session trace for token usage and performance insights.               |
-| `joone eval`                   | Run automated offline evaluation against the LangSmith dataset.                 |
-| `joone cleanup`                | Wipe all Joone configurations, keys, traces, and plugins from your machine.     |
+Release page:
 
----
+- [https://github.com/tuzzy08/joone/releases](https://github.com/tuzzy08/joone/releases)
 
-## 🏗️ Architecture
+Current desktop release assets follow canonical names like:
 
-Joone is built around the **Execution Harness** pattern, now with a shared runtime layer so multiple clients can reuse the same agent core.
+- `joone-desktop_0.1.0_windows_x64.msi`
+- `joone-desktop_0.1.0_darwin_aarch64.dmg`
+- `joone-desktop_0.1.0_linux_amd64.AppImage`
 
-1. **Prompt Builder**: Dynamically constructs LLM prompts using Anthropic/LangChain's prompt caching features to save tokens over long sessions.
-2. **Middleware Pipeline**: Tool calls pass through a robust middleware stack (Loop Detection, Command Sanitization, Permissions) before executing.
-3. **Shared Runtime Service**: A Node-side runtime layer now exposes config, session, and streaming event APIs that can be consumed by both the CLI and the upcoming desktop client.
-4. **Dynamic Sandbox**: Tools executing terminal commands or running dev servers are routed via `@langchain/core` directly into a temporary E2B sandbox. File modifications are synchronized back to your local machine via a bidirectional sync layer.
+Desktop packaging CI is green and producing all three bundle types, but final manual packaged-app smoke testing is still the next milestone slice. The CLI remains the most battle-tested interface today.
 
-## 🤝 Contributing
+### 4. Run From Source
 
-We welcome contributions!
+If you are developing on Joone itself:
 
-1. Clone the repository
-2. Run `npm install`
-3. Make your changes in `src/`
-4. Compile with `npm run build`
-5. Test your changes locally using `npm run dev -- start`
+```bash
+git clone https://github.com/tuzzy08/joone.git
+cd joone
+npm install
+```
 
-## 📝 License
+Recommended toolchain:
 
-ISC License. See `LICENSE` for more information.
+- Node.js 24
+- npm 11+
+- Rust stable for Tauri/desktop builds
+
+## Desktop Run Modes
+
+### Packaged Desktop App
+
+Download the installer for your platform from GitHub Releases and install it normally:
+
+- Windows: run the `.msi`
+- macOS: open the `.dmg` and drag the app into `Applications`
+- Linux: make the `.AppImage` executable, then run it
+
+Example for Linux:
+
+```bash
+chmod +x joone-desktop_0.1.0_linux_amd64.AppImage
+./joone-desktop_0.1.0_linux_amd64.AppImage
+```
+
+### Desktop Web Shell + Runtime (Local Development)
+
+This runs the desktop React shell against the local Node runtime over HTTP/SSE:
+
+```bash
+npm run desktop:web:dev
+```
+
+That boots:
+
+- the desktop runtime server
+- the Vite frontend shell
+
+### Real Tauri Desktop Dev
+
+This runs the actual Tauri desktop app from source:
+
+```bash
+npm run desktop:dev
+```
+
+### Build Desktop Bundles From Source
+
+```bash
+npm run desktop:build
+```
+
+On Linux, you may need the same native packages used in CI:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+```
+
+## CLI Quickstart
+
+Start a new session:
+
+```bash
+joone start
+```
+
+Resume a saved session:
+
+```bash
+joone start --resume <session-id>
+```
+
+List saved sessions:
+
+```bash
+joone sessions
+```
+
+## Commands
+
+| Command | Description |
+| --- | --- |
+| `joone start` | Start a new Joone agent session in the current directory. |
+| `joone start --resume <id>` | Resume a previously saved persistent session. |
+| `joone config` | Run the configuration wizard. |
+| `joone sessions` | List persistent sessions. |
+| `joone provider add <name>` | Install a provider package locally. |
+| `joone provider remove <name>` | Remove a locally installed provider package. |
+| `joone analyze [sessionId]` | Analyze a session trace. |
+| `joone eval` | Run offline evaluation. |
+| `joone cleanup` | Wipe Joone configs, traces, plugins, and local state. |
+| `npm run desktop:web:dev` | Run the desktop web shell against the local runtime. |
+| `npm run desktop:dev` | Run the real Tauri desktop app from source. |
+| `npm run desktop:build` | Build desktop bundles from source. |
+
+## Architecture
+
+Joone is built around the Execution Harness pattern, with a shared runtime layer that both clients can reuse.
+
+1. Prompt Builder: constructs cache-friendly prompts and layered system context.
+2. Middleware Pipeline: applies loop detection, permissioning, command safeguards, and other runtime controls.
+3. Shared Runtime Service: exposes config, session, and streaming event APIs to the CLI and desktop surfaces.
+4. Hybrid Execution Layer: keeps local file edits on the host while routing risky execution to isolated environments.
+
+For deeper architecture notes, see:
+
+- [`docs/07_system_architecture.md`](docs/07_system_architecture.md)
+- [`Handover.md`](Handover.md)
+
+## Uninstall
+
+For the CLI:
+
+1. Remove Joone's stored config/plugins/session data:
+
+```bash
+joone cleanup
+```
+
+2. Remove the global package:
+
+```bash
+npm uninstall -g joone
+```
+
+For the desktop app:
+
+- Windows: uninstall from Apps & Features or the installed MSI entry
+- macOS: remove the app from `Applications`
+- Linux: delete the downloaded `.AppImage` and any desktop shortcut you created
+
+## Contributing
+
+```bash
+git clone https://github.com/tuzzy08/joone.git
+cd joone
+npm install
+npm run build
+npm test
+```
+
+For architecture and process expectations, read:
+
+- [`AGENTS.md`](AGENTS.md)
+- [`Handover.md`](Handover.md)
+- [`docs/01_insights_and_patterns.md`](docs/01_insights_and_patterns.md)
+- [`docs/07_system_architecture.md`](docs/07_system_architecture.md)
+
+## License
+
+ISC. See [`LICENSE`](LICENSE).
