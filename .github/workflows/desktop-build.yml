@@ -69,3 +69,6 @@ jobs:
 
       - name: Validate bundle outputs
         run: npx tsx src/desktop/validateBundles.ts --runner "${{ matrix.platform }}"
+
+      - name: Smoke test desktop installers
+        run: npx tsx src/desktop/smokeTestBundles.ts --runner "${{ matrix.platform }}"
