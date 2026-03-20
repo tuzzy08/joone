@@ -20,6 +20,20 @@ describe("Desktop scaffold", () => {
     expect(fs.existsSync(path.resolve("src-tauri/src/main.rs"))).toBe(true);
   });
 
+  it("declares an explicit cross-platform icon set for Tauri bundling", () => {
+    const tauriConfig = JSON.parse(
+      fs.readFileSync(path.resolve("src-tauri/tauri.conf.json"), "utf8"),
+    );
+
+    expect(tauriConfig.bundle?.icon).toEqual(
+      expect.arrayContaining([
+        "icons/icon.png",
+        "icons/icon.icns",
+        "icons/icon.ico",
+      ]),
+    );
+  });
+
   it("wires the Tauri build script required by generate_context", () => {
     const cargoToml = fs.readFileSync(path.resolve("src-tauri/Cargo.toml"), "utf8");
     const buildRs = fs.readFileSync(path.resolve("src-tauri/build.rs"), "utf8");
