@@ -20,10 +20,12 @@ describe("Desktop packaging workflow", () => {
     expect(source).toContain("libwebkit2gtk-4.1-dev");
     expect(source).toContain("assetNamePattern:");
     expect(source).toContain("actions/upload-artifact@v4");
-    expect(source).toContain("Publish desktop release assets");
-    expect(source).toContain("tsx src/desktop/publishReleaseAssets.ts");
+    expect(source).toContain("Prune legacy desktop release assets");
+    expect(source).toContain("tsx src/desktop/pruneReleaseAssets.ts");
     expect(source).not.toContain("releaseAssetNamePattern:");
     expect(source).not.toContain("workflowArtifactNamePattern:");
     expect(source).not.toContain("uploadWorkflowArtifacts:");
+    expect(source).not.toContain("Publish desktop release assets");
+    expect(source).not.toContain("publishReleaseAssets.ts");
   });
 });

@@ -55,6 +55,12 @@ jobs:
         id: release_meta
         run: npx tsx src/desktop/releaseMetadata.ts
 
+      - name: Prune legacy desktop release assets
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx tsx src/desktop/pruneReleaseAssets.ts --tag "${{ steps.release_meta.outputs.release_tag }}" --keep-prefix "${{ steps.release_meta.outputs.asset_name_prefix }}"
+
       - name: Build Tauri desktop bundles
         uses: tauri-apps/tauri-action@v0
         env:
@@ -70,12 +76,6 @@ jobs:
 
       - name: Smoke test desktop installers
         run: npx tsx src/desktop/smokeTestBundles.ts --runner "${{ matrix.platform }}"
-
-      - name: Publish desktop release assets
-        if: github.event_name != 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx tsx src/desktop/publishReleaseAssets.ts --runner "${{ matrix.platform }}" --tag "${{ steps.release_meta.outputs.release_tag }}"
 
       - name: Upload desktop bundle artifacts
         uses: actions/upload-artifact@v4

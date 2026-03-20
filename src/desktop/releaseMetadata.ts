@@ -15,6 +15,7 @@ export interface DesktopReleaseMetadata {
   releaseTag: string;
   releaseName: string;
   releaseBody: string;
+  assetNamePrefix: string;
   assetNamePattern: string;
   workflowArtifactPrefix: string;
 }
@@ -57,6 +58,7 @@ export const loadDesktopReleaseMetadata = (
     releaseTag: `${slug}-v${version}`,
     releaseName: `${productName} v${version}`,
     releaseBody: `Automated desktop bundles for ${productName} v${version}.`,
+    assetNamePrefix: `${slug}_${version}_`,
     assetNamePattern: `${slug}_[version]_[platform]_[arch][ext]`,
     workflowArtifactPrefix: `${slug}-desktop-bundles-v${version}`,
   };
@@ -74,6 +76,7 @@ const writeGitHubOutput = (metadata: DesktopReleaseMetadata): void => {
     `release_tag=${metadata.releaseTag}`,
     `release_name=${metadata.releaseName}`,
     `release_body=${metadata.releaseBody}`,
+    `asset_name_prefix=${metadata.assetNamePrefix}`,
     `asset_name_pattern=${metadata.assetNamePattern}`,
     `workflow_artifact_prefix=${metadata.workflowArtifactPrefix}`,
   ];

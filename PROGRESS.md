@@ -732,3 +732,21 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopCliEntry.test.ts tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopReleasePublish.test.ts tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopInstallerSmokeWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopInstallerSmoke.test.ts`
   - `npm run build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-20: Desktop Release Deduplication Polish
+
+- Follow-up hosted release review showed the pipeline was functionally correct but still messy: the release contained duplicate assets because both `tauri-action` and the temporary explicit `gh release upload` path were publishing bundles.
+- Simplified the release path so `tauri-action` is once again the only uploader for release assets, while workflow artifacts still upload explicitly through `actions/upload-artifact@v4`.
+- Added `src/desktop/pruneReleaseAssets.ts` so the workflow now removes legacy non-canonical desktop asset names from the target release before the canonical upload step runs.
+- Updated `src/desktop/releaseMetadata.ts` to emit `asset_name_prefix` alongside `asset_name_pattern`, giving the prune step a stable canonical prefix to preserve.
+- Removed the temporary explicit publish path:
+  - deleted `src/desktop/publishReleaseAssets.ts`
+  - deleted `tests/desktop/desktopReleasePublish.test.ts`
+- Added regression coverage in:
+  - `tests/desktop/desktopReleasePrune.test.ts`
+  - `tests/desktop/desktopPackagingWorkflow.test.ts`
+  - `tests/desktop/desktopReleaseMetadata.test.ts`
+- Verification completed:
+  - `npm test -- tests/desktop/desktopCliEntry.test.ts tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopReleasePrune.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopInstallerSmokeWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopInstallerSmoke.test.ts`
+  - `npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`

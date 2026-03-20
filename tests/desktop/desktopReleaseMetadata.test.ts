@@ -13,6 +13,7 @@ describe("Desktop release metadata", () => {
     expect(metadata.slug).toBe("joone-desktop");
     expect(metadata.releaseTag).toBe("joone-desktop-v0.1.0");
     expect(metadata.releaseName).toBe("Joone Desktop v0.1.0");
+    expect(metadata.assetNamePrefix).toBe("joone-desktop_0.1.0_");
     expect(metadata.assetNamePattern).toBe(
       "joone-desktop_[version]_[platform]_[arch][ext]",
     );
