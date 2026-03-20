@@ -8,6 +8,9 @@ on:
       - main
       - dev
 
+permissions:
+  contents: write
+
 jobs:
   desktop-bundle:
     name: bundle-${{ matrix.platform }}
@@ -48,9 +51,20 @@ jobs:
       - name: Build shared runtime
         run: npm run build
 
+      - name: Compute desktop release metadata
+        id: release_meta
+        run: npx tsx src/desktop/releaseMetadata.ts
+
       - name: Build Tauri desktop bundles
         uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          tagName: ${{ steps.release_meta.outputs.release_tag }}
+          releaseName: ${{ steps.release_meta.outputs.release_name }}
+          releaseBody: ${{ steps.release_meta.outputs.release_body }}
+          releaseAssetNamePattern: ${{ steps.release_meta.outputs.release_asset_name_pattern }}
+          workflowArtifactNamePattern: ${{ steps.release_meta.outputs.workflow_artifact_name_pattern }}
           uploadWorkflowArtifacts: true
 
       - name: Validate bundle outputs

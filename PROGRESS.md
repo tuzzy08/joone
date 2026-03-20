@@ -658,3 +658,22 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-20: Desktop Release Metadata and Artifact Naming Polish
+
+- Added `src/desktop/releaseMetadata.ts` as the desktop release source of truth derived from `src-tauri/tauri.conf.json`.
+- The helper now standardizes:
+  - release tag naming
+  - release names/body text
+  - workflow artifact naming
+  - release asset naming
+- Updated `.github/workflows/desktop-build.yml` so the desktop bundle workflow now computes that metadata before invoking `tauri-apps/tauri-action` and passes explicit:
+  - `tagName`
+  - `releaseName`
+  - `releaseBody`
+  - `releaseAssetNamePattern`
+  - `workflowArtifactNamePattern`
+- Added regression coverage in `tests/desktop/desktopReleaseMetadata.test.ts` for both the helper output contract and the workflow wiring.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts`
+  - `npm run build`
