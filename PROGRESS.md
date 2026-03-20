@@ -643,3 +643,18 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopUiShell.test.ts`
   - `npm run build`
   - `npm run desktop:web:build`
+
+### 2026-03-20: Desktop Restore and Empty-State Cleanup
+
+- Cleaned up the remaining resumed-session UX gaps in `desktop/src/App.tsx` and `desktop/src/styles.css`:
+  - added an explicit `isRestoringSession` state for the period after the user clicks resume but before the restored thread is active
+  - replaced the generic conversation placeholder with distinct conversation-pane states for:
+    - restoring a saved thread
+    - no active session yet
+    - an active session that has no saved conversation turns
+  - added a small `hero-kicker` state cue so the top of the shell reflects whether the user is restoring a saved thread, continuing a resumed one, or starting fresh
+- Added regression coverage in `tests/desktop/desktopUiShell.test.ts` for the new restore/empty-state contract.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`

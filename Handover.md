@@ -157,6 +157,7 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - The next desktop UX slice polished session resume affordances. `desktop/src/bridge/types.ts` now exposes `lastSavedAt?: number`, `src-tauri/src/main.rs` carries persisted session timestamps through the native snapshot contract, and the browser fallback stamps mock sessions too so the local dev path exercises the same UI.
 - `desktop/src/App.tsx` and `desktop/src/styles.css` now render human-readable `Last saved ...` metadata for session cards, a `Current session` badge for the active thread, and a `Resuming...` loading state that disables competing resume actions while a session is loading.
 - A follow-up resume UX slice now restores the actual conversation affordances after resume. `desktop/src/App.tsx` uses a `conversationRef` to scroll the restored session back to the newest entry and a `composerInputRef` to return keyboard focus to the main composer once resume completes, unless a HITL prompt is currently blocking input.
+- The final pre-packaging desktop UX slice cleans up restored-thread states. `desktop/src/App.tsx` now distinguishes between "restoring a saved thread", "no active session yet", and "active session with no saved turns" instead of falling back to one generic placeholder, and `desktop/src/styles.css` adds matching `conversation-state` styling plus a `hero-kicker` cue in the shell header.
 
 ### Tool Routing Summary
 
@@ -176,7 +177,6 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 **Continue with Milestone 20:**
 
 1.  **M20: Tauri Cross-Platform Desktop Client** — continue the post-foundation UX and packaging finish work now that the runtime boundary is native end-to-end.
-2.  **Next product slice:** continue desktop conversation affordance polish around resumed sessions, especially any remaining empty/loading state cleanup and higher-level message timeline polish now that focus/scroll recovery is in place.
-3.  **Next delivery slice:** continue packaging polish on top of the validated cross-platform bundle workflow, with the main remaining packaging work now being artifact naming/release polish and real installer smoke testing on each target OS.
+2.  **Next delivery slice:** pivot to packaging polish on top of the validated cross-platform bundle workflow, with the main remaining work now being artifact naming/release polish and real installer smoke testing on each target OS.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._
