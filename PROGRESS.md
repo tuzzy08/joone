@@ -750,3 +750,4 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopCliEntry.test.ts tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopReleasePrune.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopInstallerSmokeWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopInstallerSmoke.test.ts`
   - `npm run build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+- Hosted CI then exposed one more GitHub CLI nuance: `gh release view --json assets` does not return the asset identifier shape expected by `gh release delete-asset` in this workflow. The prune helper now deletes by asset **name** instead of the JSON `id` field, which makes the cleanup step work consistently across runners.

@@ -54,7 +54,7 @@ export const pruneDesktopReleaseAssets = ({
   for (const asset of staleAssets) {
     exec(
       "gh",
-      ["release", "delete-asset", tag, String(asset.id), "--yes"],
+      ["release", "delete-asset", tag, asset.name, "--yes"],
       buildExecOptions(rootDir),
     );
   }

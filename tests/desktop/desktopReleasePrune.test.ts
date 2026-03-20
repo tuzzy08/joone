@@ -30,13 +30,25 @@ describe("Desktop release pruning", () => {
     expect(exec).toHaveBeenNthCalledWith(
       2,
       "gh",
-      ["release", "delete-asset", "joone-desktop-v0.1.0", "2", "--yes"],
+      [
+        "release",
+        "delete-asset",
+        "joone-desktop-v0.1.0",
+        "Joone.Desktop_0.1.0_x64_en-US.msi",
+        "--yes",
+      ],
       expect.objectContaining({ encoding: "utf8", stdio: "pipe" }),
     );
     expect(exec).toHaveBeenNthCalledWith(
       3,
       "gh",
-      ["release", "delete-asset", "joone-desktop-v0.1.0", "3", "--yes"],
+      [
+        "release",
+        "delete-asset",
+        "joone-desktop-v0.1.0",
+        "Joone.Desktop_0.1.0_amd64.AppImage",
+        "--yes",
+      ],
       expect.objectContaining({ encoding: "utf8", stdio: "pipe" }),
     );
   });
