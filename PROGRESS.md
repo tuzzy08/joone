@@ -631,3 +631,15 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm run build`
   - `npm run desktop:web:build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-20: Desktop Resume Focus and Scroll Polish
+
+- Tightened the restored-session experience in `desktop/src/App.tsx` by adding:
+  - `conversationRef` so the desktop shell scrolls back to the latest restored conversation entry after resume/message updates
+  - `composerInputRef` so the main composer regains focus after a session finishes resuming, as long as no HITL prompt is blocking input
+- Implemented the actual behavior with small `useEffect` hooks plus `requestAnimationFrame(...)` to avoid fighting the DOM before the restored session content is painted.
+- Added regression coverage in `tests/desktop/desktopUiShell.test.ts` for the new scroll/focus affordance contract.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
