@@ -63,12 +63,26 @@ jobs:
           tagName: ${{ steps.release_meta.outputs.release_tag }}
           releaseName: ${{ steps.release_meta.outputs.release_name }}
           releaseBody: ${{ steps.release_meta.outputs.release_body }}
-          releaseAssetNamePattern: ${{ steps.release_meta.outputs.release_asset_name_pattern }}
-          workflowArtifactNamePattern: ${{ steps.release_meta.outputs.workflow_artifact_name_pattern }}
-          uploadWorkflowArtifacts: true
+          assetNamePattern: ${{ steps.release_meta.outputs.asset_name_pattern }}
 
       - name: Validate bundle outputs
         run: npx tsx src/desktop/validateBundles.ts --runner "${{ matrix.platform }}"
 
       - name: Smoke test desktop installers
         run: npx tsx src/desktop/smokeTestBundles.ts --runner "${{ matrix.platform }}"
+
+      - name: Publish desktop release assets
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx tsx src/desktop/publishReleaseAssets.ts --runner "${{ matrix.platform }}" --tag "${{ steps.release_meta.outputs.release_tag }}"
+
+      - name: Upload desktop bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.release_meta.outputs.workflow_artifact_prefix }}-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.dmg

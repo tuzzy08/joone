@@ -13,11 +13,11 @@ describe("Desktop release metadata", () => {
     expect(metadata.slug).toBe("joone-desktop");
     expect(metadata.releaseTag).toBe("joone-desktop-v0.1.0");
     expect(metadata.releaseName).toBe("Joone Desktop v0.1.0");
-    expect(metadata.releaseAssetNamePattern).toBe(
+    expect(metadata.assetNamePattern).toBe(
       "joone-desktop_[version]_[platform]_[arch][ext]",
     );
-    expect(metadata.workflowArtifactNamePattern).toBe(
-      "joone-desktop-[platform]-[arch]-[bundle]",
+    expect(metadata.workflowArtifactPrefix).toBe(
+      "joone-desktop-desktop-bundles-v0.1.0",
     );
     expect(metadata.releaseBody).toContain("desktop bundles");
   });
@@ -39,10 +39,10 @@ describe("Desktop release metadata", () => {
       "releaseBody: ${{ steps.release_meta.outputs.release_body }}",
     );
     expect(workflow).toContain(
-      "releaseAssetNamePattern: ${{ steps.release_meta.outputs.release_asset_name_pattern }}",
+      "assetNamePattern: ${{ steps.release_meta.outputs.asset_name_pattern }}",
     );
     expect(workflow).toContain(
-      "workflowArtifactNamePattern: ${{ steps.release_meta.outputs.workflow_artifact_name_pattern }}",
+      "name: ${{ steps.release_meta.outputs.workflow_artifact_prefix }}-${{ matrix.platform }}",
     );
   });
 });

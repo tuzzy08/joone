@@ -13,8 +13,8 @@ export interface DesktopReleaseMetadata {
   releaseTag: string;
   releaseName: string;
   releaseBody: string;
-  releaseAssetNamePattern: string;
-  workflowArtifactNamePattern: string;
+  assetNamePattern: string;
+  workflowArtifactPrefix: string;
 }
 
 const slugify = (value: string): string =>
@@ -55,8 +55,8 @@ export const loadDesktopReleaseMetadata = (
     releaseTag: `${slug}-v${version}`,
     releaseName: `${productName} v${version}`,
     releaseBody: `Automated desktop bundles for ${productName} v${version}.`,
-    releaseAssetNamePattern: `${slug}_[version]_[platform]_[arch][ext]`,
-    workflowArtifactNamePattern: `${slug}-[platform]-[arch]-[bundle]`,
+    assetNamePattern: `${slug}_[version]_[platform]_[arch][ext]`,
+    workflowArtifactPrefix: `${slug}-desktop-bundles-v${version}`,
   };
 };
 
@@ -72,8 +72,8 @@ const writeGitHubOutput = (metadata: DesktopReleaseMetadata): void => {
     `release_tag=${metadata.releaseTag}`,
     `release_name=${metadata.releaseName}`,
     `release_body=${metadata.releaseBody}`,
-    `release_asset_name_pattern=${metadata.releaseAssetNamePattern}`,
-    `workflow_artifact_name_pattern=${metadata.workflowArtifactNamePattern}`,
+    `asset_name_pattern=${metadata.assetNamePattern}`,
+    `workflow_artifact_prefix=${metadata.workflowArtifactPrefix}`,
   ];
 
   fs.appendFileSync(outputPath, `${outputLines.join("\n")}\n`, "utf8");
