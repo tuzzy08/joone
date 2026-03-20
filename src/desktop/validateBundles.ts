@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { isDirectDesktopScriptExecution } from "./cliEntry.js";
+
 export type DesktopBundlePlatform = "msi" | "appimage" | "dmg";
 export type DesktopBundleRunner =
   | "windows-latest"
@@ -84,7 +86,7 @@ const parseRunnerArg = (): DesktopBundleRunner => {
   );
 };
 
-if (import.meta.url === new URL(process.argv[1], "file:").href) {
+if (isDirectDesktopScriptExecution(import.meta.url)) {
   const bundles = validateDesktopBundles({ runner: parseRunnerArg() });
   for (const bundle of bundles) {
     console.log(bundle);

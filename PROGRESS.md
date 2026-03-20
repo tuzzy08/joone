@@ -716,3 +716,19 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
   - `npm test -- tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopReleasePublish.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopInstallerSmokeWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopInstallerSmoke.test.ts`
   - `npm run build`
   - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
+
+### 2026-03-20: Windows Desktop Script Entry Fix
+
+- Follow-up hosted CI inspection showed the Windows job still had blank `release_tag` / `workflow_artifact_prefix` outputs, so the publish step ran with `--tag ""` and the workflow artifact name degraded to `-windows-latest`.
+- Root cause: multiple desktop CLI helper scripts used `import.meta.url === new URL(process.argv[1], "file:").href`, which worked on macOS/Linux but could silently no-op on Windows path shapes.
+- Added `src/desktop/cliEntry.ts` with a shared `isDirectDesktopScriptExecution(...)` helper that normalizes Windows drive-letter paths and POSIX paths explicitly.
+- Updated the affected desktop scripts to use the shared helper:
+  - `src/desktop/releaseMetadata.ts`
+  - `src/desktop/publishReleaseAssets.ts`
+  - `src/desktop/validateBundles.ts`
+  - `src/desktop/smokeTestBundles.ts`
+- Added regression coverage in `tests/desktop/desktopCliEntry.test.ts` so Windows and POSIX argv path shapes both stay supported.
+- Verification completed:
+  - `npm test -- tests/desktop/desktopCliEntry.test.ts tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopReleasePublish.test.ts tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopInstallerSmokeWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts tests/desktop/desktopInstallerSmoke.test.ts`
+  - `npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`

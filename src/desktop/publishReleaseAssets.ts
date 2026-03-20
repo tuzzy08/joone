@@ -4,6 +4,7 @@ import {
   validateDesktopBundles,
   type DesktopBundleRunner,
 } from "./validateBundles.js";
+import { isDirectDesktopScriptExecution } from "./cliEntry.js";
 
 export type ReleaseUploadExecutor = (
   command: string,
@@ -82,7 +83,7 @@ const parseRunnerArg = (): DesktopBundleRunner => {
   );
 };
 
-if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
+if (isDirectDesktopScriptExecution(import.meta.url)) {
   const bundles = publishDesktopReleaseAssets({
     runner: parseRunnerArg(),
     tag: parseTagArg(),

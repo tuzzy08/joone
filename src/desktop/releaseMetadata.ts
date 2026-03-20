@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import { isDirectDesktopScriptExecution } from "./cliEntry.js";
+
 interface TauriDesktopConfig {
   productName: string;
   version: string;
@@ -79,6 +81,6 @@ const writeGitHubOutput = (metadata: DesktopReleaseMetadata): void => {
   fs.appendFileSync(outputPath, `${outputLines.join("\n")}\n`, "utf8");
 };
 
-if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
+if (isDirectDesktopScriptExecution(import.meta.url)) {
   writeGitHubOutput(loadDesktopReleaseMetadata());
 }
