@@ -15,6 +15,8 @@ describe("Desktop scaffold", () => {
     expect(fs.existsSync(path.resolve("src-tauri/Cargo.toml"))).toBe(true);
     expect(fs.existsSync(path.resolve("src-tauri/build.rs"))).toBe(true);
     expect(fs.existsSync(path.resolve("src-tauri/icons/icon.ico"))).toBe(true);
+    expect(fs.existsSync(path.resolve("src-tauri/icons/icon.png"))).toBe(true);
+    expect(fs.existsSync(path.resolve("src-tauri/icons/icon.icns"))).toBe(true);
     expect(fs.existsSync(path.resolve("src-tauri/src/main.rs"))).toBe(true);
   });
 
