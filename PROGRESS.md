@@ -677,3 +677,18 @@ The agent now supports robust **Persistent Sessions** allowing users to pause/re
 - Verification completed:
   - `npm test -- tests/desktop/desktopReleaseMetadata.test.ts tests/desktop/desktopPackagingWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts`
   - `npm run build`
+
+### 2026-03-20: Desktop Installer Smoke Checks
+
+- Added `src/desktop/smokeTestBundles.ts` to run platform-native installer sanity checks after Tauri bundling:
+  - Windows: `msiexec /a` administrative extraction for `.msi` bundles
+  - Linux: `--appimage-extract` for `.AppImage` bundles
+  - macOS: `hdiutil attach` / `detach` plus `.app` presence checks for `.dmg` bundles
+- Updated `.github/workflows/desktop-build.yml` so the desktop packaging workflow now runs `Smoke test desktop installers` immediately after bundle validation on every matrix platform.
+- Added regression coverage in:
+  - `tests/desktop/desktopInstallerSmoke.test.ts`
+  - `tests/desktop/desktopInstallerSmokeWorkflow.test.ts`
+- Verification completed:
+  - `npm test -- tests/desktop/desktopInstallerSmoke.test.ts tests/desktop/desktopInstallerSmokeWorkflow.test.ts tests/desktop/desktopPackagingValidationWorkflow.test.ts tests/desktop/desktopBundleValidation.test.ts`
+  - `npm run build`
+  - `cargo check --manifest-path src-tauri/Cargo.toml` using a temporary `CARGO_TARGET_DIR`
