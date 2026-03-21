@@ -16,15 +16,48 @@ describe("Desktop runtime server", () => {
   it("serves health and runtime-backed config/session routes", async () => {
     const server = await createDesktopRuntimeServer({
       runtime: {
+        async getWorkspaceContext() {
+          return {
+            gitBranch: "dev",
+            permissionMode: "ask_all",
+            executionMode: "host",
+          };
+        },
         async loadConfig() {
           return {
             provider: "anthropic",
             model: "claude-sonnet-4-20250514",
             streaming: true,
+            permissionMode: "ask_all",
+            appearance: "light",
+            notifications: {
+              permissions: true,
+              completionSummary: true,
+              needsAttention: true,
+            },
+            updates: {
+              autoCheck: true,
+            },
+            providerConnections: {},
           };
         },
         async saveConfig() {
           return;
+        },
+        async testProviderConnection() {
+          return {
+            ok: true,
+            message: "ready",
+          };
+        },
+        async checkForUpdates() {
+          return {
+            checkedAt: Date.now(),
+            available: false,
+            currentVersion: "0.1.0",
+            latestVersion: "0.1.0",
+            message: "Up to date",
+          };
         },
         async listSessions() {
           return [];
@@ -88,10 +121,20 @@ describe("Desktop runtime server", () => {
     const health = await fetch(`${server.url}/health`);
     expect(await health.json()).toEqual({ ok: true });
 
+    const status = await fetch(`${server.url}/status`);
+    expect(await status.json()).toMatchObject({
+      backend: "runtime",
+      healthy: true,
+      runtimeOwner: "external",
+      gitBranch: "dev",
+      permissionMode: "ask_all",
+    });
+
     const config = await fetch(`${server.url}/config`);
     expect(await config.json()).toMatchObject({
       provider: "anthropic",
       model: "claude-sonnet-4-20250514",
+      appearance: "light",
     });
 
     const session = await fetch(`${server.url}/sessions`, {
@@ -107,11 +150,24 @@ describe("Desktop runtime server", () => {
   it("allows the desktop web shell origin via CORS, including preflight requests", async () => {
     const server = await createDesktopRuntimeServer({
       runtime: {
+        async getWorkspaceContext() {
+          return {
+            gitBranch: null,
+            permissionMode: "auto",
+            executionMode: "host",
+          };
+        },
         async loadConfig() {
           return {};
         },
         async saveConfig() {
           return;
+        },
+        async testProviderConnection() {
+          return {};
+        },
+        async checkForUpdates() {
+          return {};
         },
         async listSessions() {
           return [];
@@ -168,11 +224,24 @@ describe("Desktop runtime server", () => {
     const answers: Array<{ id: string; answer: string }> = [];
     const server = await createDesktopRuntimeServer({
       runtime: {
+        async getWorkspaceContext() {
+          return {
+            gitBranch: null,
+            permissionMode: "auto",
+            executionMode: "host",
+          };
+        },
         async loadConfig() {
           return {};
         },
         async saveConfig() {
           return;
+        },
+        async testProviderConnection() {
+          return {};
+        },
+        async checkForUpdates() {
+          return {};
         },
         async listSessions() {
           return [];

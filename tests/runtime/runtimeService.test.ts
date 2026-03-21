@@ -53,6 +53,69 @@ describe("JooneRuntimeService", () => {
     expect(reloaded.model).toBe("gemini-2.5-pro");
   });
 
+  it("migrates and persists the expanded desktop settings model", async () => {
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          provider: "openai",
+          model: "gpt-4o",
+          permissionMode: "auto",
+        },
+        null,
+        2,
+      ),
+    );
+
+    const service = new JooneRuntimeService({
+      configPath,
+      cwd: tempRoot,
+      harnessFactory: makeHarnessFactory(),
+    });
+
+    const loaded = await service.loadConfig();
+
+    expect(loaded.appearance).toBe("light");
+    expect(loaded.notifications).toEqual({
+      permissions: true,
+      completionSummary: true,
+      needsAttention: true,
+    });
+    expect(loaded.updates).toEqual({
+      autoCheck: true,
+    });
+    expect(loaded.providerConnections.openai).toMatchObject({
+      connected: false,
+      defaultModel: "gpt-4o",
+    });
+
+    await service.saveConfig({
+      ...loaded,
+      appearance: "dark",
+      permissionMode: "ask_all",
+      providerConnections: {
+        ...loaded.providerConnections,
+        openai: {
+          ...loaded.providerConnections.openai,
+          apiKey: "sk-test",
+          connected: true,
+          defaultModel: "gpt-4o-mini",
+        },
+      },
+    });
+
+    const reloaded = await service.loadConfig();
+
+    expect(reloaded.appearance).toBe("dark");
+    expect(reloaded.permissionMode).toBe("ask_all");
+    expect(reloaded.providerConnections.openai).toMatchObject({
+      apiKey: "sk-test",
+      connected: true,
+      defaultModel: "gpt-4o-mini",
+    });
+    expect(reloaded.apiKey).toBe("sk-test");
+  });
+
   it("starts a session and emits serializable lifecycle events", async () => {
     const service = new JooneRuntimeService({
       configPath,

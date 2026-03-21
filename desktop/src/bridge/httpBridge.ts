@@ -3,28 +3,37 @@ import type {
   DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
+  DesktopProviderConnection,
+  DesktopProviderConnectionResult,
   DesktopSessionSnapshot,
+  DesktopUpdateCheckResult,
+  DesktopWorkspaceContext,
 } from "./types";
 
 export function createHttpDesktopBridge(baseUrl: string): DesktopBridge {
   return {
     async getStatus() {
       try {
-        const health = await getJson<{ ok: boolean }>(`${baseUrl}/health`);
+        const status = await getJson<Omit<DesktopBridgeStatus, "mode">>(
+          `${baseUrl}/status`,
+        );
         return {
           mode: "http",
-          backend: "runtime",
-          healthy: health.ok,
-          baseUrl,
+          ...status,
+          baseUrl: status.baseUrl ?? baseUrl,
         };
       } catch {
         return {
           mode: "http",
           backend: "runtime",
           healthy: false,
+          runtimeOwner: "external",
           baseUrl,
         };
       }
+    },
+    async getWorkspaceContext() {
+      return getJson<DesktopWorkspaceContext>(`${baseUrl}/workspace/context`);
     },
     async loadConfig() {
       return getJson<DesktopConfig>(`${baseUrl}/config`);
@@ -35,6 +44,15 @@ export function createHttpDesktopBridge(baseUrl: string): DesktopBridge {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(config),
       });
+    },
+    async testProviderConnection(provider, connection) {
+      return postJson<DesktopProviderConnectionResult>(
+        `${baseUrl}/providers/${provider}/test`,
+        connection,
+      );
+    },
+    async checkForUpdates() {
+      return getJson<DesktopUpdateCheckResult>(`${baseUrl}/updates/check`);
     },
     async answerHitl(id, answer) {
       await fetch(`${baseUrl}/hitl/${id}/answer`, {

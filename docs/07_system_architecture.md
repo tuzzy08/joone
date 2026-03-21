@@ -22,7 +22,7 @@ At a high level:
 
 For the desktop path, there are currently three frontend/runtime modes:
 
-- **Tauri bridge**: the intended end-state, where the desktop UI talks to Tauri commands/events
+- **Tauri bridge**: the production packaged path, where the desktop UI talks to native Tauri commands/events and the shell owns a bundled runtime sidecar
 - **HTTP bridge**: a local development path where the desktop UI talks to a Node dev server over HTTP + SSE
 - **Browser fallback**: a mock bridge used only when neither Tauri nor the local runtime server is present
 
@@ -45,7 +45,8 @@ graph TD
     end
 
     CLI --> Runtime["JooneRuntimeService"]
-    TauriBridge --> Runtime
+    TauriBridge --> ManagedRuntime["Bundled Node Runtime Sidecar"]
+    ManagedRuntime --> Runtime
     HttpBridge --> DevServer["Desktop Runtime Server"]
     DevServer --> Runtime
 
@@ -99,16 +100,33 @@ graph TD
 
 - Intended production architecture
 - The desktop shell uses `@tauri-apps/api` to call native commands and subscribe to emitted events
+- Packaged builds now launch a bundled Node sidecar that runs `dist/desktop/runtimeEntry.js`, wait for `/health` to go green, and then proxy native commands/events to that owned runtime
 - Current native coverage:
   - startup status/config
+  - workspace metadata
+  - provider connection tests
+  - update checks
   - config save
   - saved session listing
   - session start/resume
   - message submission
   - live session event subscription via native Tauri events relayed from the runtime SSE stream
   - session close
-- The Tauri frontend no longer uses the HTTP bridge; remaining work in this area is UX-level config editing rather than transport migration
+- The Tauri frontend no longer uses the HTTP bridge; the remaining M20 work is installed-app smoke validation and post-smoke cleanup decisions around developer-only fallback layers
 - This will replace the browser fallback as the primary desktop runtime path once Milestone 20 is complete
+
+## Desktop Shell Model
+
+The current desktop UI is organized as a native app shell rather than a page-with-panels:
+
+- **Toggleable Sidebar**: compact session list, active-session state, per-session attention markers, settings launcher
+- **Conversation Workspace**: thread header, scrollable timeline, workstream cards, tool-call cards, HITL cards
+- **Composer Shell**: persistent message input plus footer metadata pills for model, permission mode, git branch, and runtime health
+- **Settings Modal**:
+  - `General`: appearance, notifications, update checks, permission mode, streaming
+  - `Providers`: connected/disconnected provider cards, model selection, connect/edit/test/disconnect actions
+
+This UI is driven by the shared config/runtime contract rather than a desktop-only state model, which keeps the dev HTTP path and the packaged Tauri path aligned.
 
 ## Hybrid Sandbox Model
 
@@ -143,6 +161,7 @@ Sandbox:
    - `src/runtime/types.ts`: normalized runtime event and session contracts
    - `src/desktop/ipc.ts`: desktop-facing runtime bridge contract for the Tauri path
    - `src/desktop/server.ts`: HTTP/SSE server for local desktop development
+   - `src/desktop/runtimeEntry.ts`: packaged runtime sidecar entrypoint used by installed Tauri builds
 
 3. **Execution Engine**
    - `src/core/agentLoop.ts`: `ExecutionHarness` backed by Deep Agents and LangGraph primitives
@@ -189,12 +208,12 @@ It now also drives the richer "workstream" presentation used by both the desktop
 - desktop shell exists
 - HTTP runtime-backed dev mode exists
 - browser fallback exists for UI-only work
-- Tauri production command/event wiring now covers startup, session lifecycle, message submission, live runtime event subscription, and session close
-- Tauri production command/event wiring now also covers config save; the remaining M20 work is primarily UX completion and packaging
+- Tauri production command/event wiring now covers startup, workspace metadata, provider tests, update checks, session lifecycle, message submission, live runtime event subscription, and session close
+- packaged desktop builds now own a bundled local runtime instead of assuming an external `127.0.0.1:3011` server already exists
 - both desktop and CLI now share a similar workstream UI model for live tool calls and request progress, built on the normalized runtime event surface
 
 ### End state for Milestone 20
 
-- desktop shell talks to the real runtime through Tauri, not mock fallback
+- desktop shell talks to the real runtime through Tauri-owned packaged runtime, not mock fallback
 - desktop packaging works for `.msi`, `.dmg`, and `.AppImage`
 - CLI and desktop remain two supported clients over the same runtime core

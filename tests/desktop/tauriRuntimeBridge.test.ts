@@ -10,8 +10,12 @@ describe("Tauri runtime bridge", () => {
     );
 
     expect(source).toContain('invoke<DesktopBridgeStatus>("runtime_status")');
+    expect(source).toContain('invoke<DesktopWorkspaceContext>("runtime_workspace_context")');
     expect(source).toContain('invoke<DesktopConfig>("runtime_load_config")');
     expect(source).toContain('invoke("runtime_save_config"');
+    expect(source).toContain('invoke<DesktopProviderConnectionResult>(');
+    expect(source).toContain('"runtime_test_provider_connection"');
+    expect(source).toContain('invoke<DesktopUpdateCheckResult>("runtime_check_updates")');
     expect(source).toContain('invoke("runtime_answer_hitl"');
     expect(source).toContain(
       'invoke<DesktopSessionSnapshot[]>("runtime_list_sessions")',
@@ -47,8 +51,11 @@ describe("Tauri runtime bridge", () => {
 
     expect(source).toContain("runtime_base_url");
     expect(source).toContain("runtime_status");
+    expect(source).toContain("runtime_workspace_context");
     expect(source).toContain("runtime_load_config");
     expect(source).toContain("runtime_save_config");
+    expect(source).toContain("runtime_test_provider_connection");
+    expect(source).toContain("runtime_check_updates");
     expect(source).toContain("runtime_answer_hitl");
     expect(source).toContain("runtime_list_sessions");
     expect(source).toContain("runtime_start_session");
@@ -62,19 +69,17 @@ describe("Tauri runtime bridge", () => {
     expect(source).toContain("JOONE_DESKTOP_RUNTIME_URL");
   });
 
-  it("carries persisted session timestamps through the native session snapshot contract", () => {
-    const bridgeTypes = fs.readFileSync(
-      path.resolve("desktop/src/bridge/types.ts"),
-      "utf8",
-    );
+  it("owns a managed desktop runtime instead of assuming a fixed external port in packaged mode", () => {
     const tauriSource = fs.readFileSync(
       path.resolve("src-tauri/src/main.rs"),
       "utf8",
     );
 
-    expect(bridgeTypes).toContain("lastSavedAt?: number");
-    expect(tauriSource).toContain('#[serde(rename = "lastSavedAt")]');
-    expect(tauriSource).toContain("last_saved_at: Option<u64>");
-    expect(tauriSource).toContain("last_saved_at: Some(header.last_saved_at)");
+    expect(tauriSource).toContain("ManagedRuntimeState");
+    expect(tauriSource).toContain("ensure_runtime_url");
+    expect(tauriSource).toContain("spawn_managed_runtime");
+    expect(tauriSource).toContain("wait_for_runtime_health");
+    expect(tauriSource).toContain("kill_runtime_process");
+    expect(tauriSource).toContain("runtimeOwner");
   });
 });

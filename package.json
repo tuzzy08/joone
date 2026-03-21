@@ -12,6 +12,7 @@
   "scripts": {
     "build": "tsc",
     "desktop:runtime:dev": "tsx src/desktop/devServer.ts",
+    "desktop:prepare-runtime": "tsx src/desktop/prepareRuntimeBundle.ts",
     "desktop:web:dev": "tsx src/desktop/webDev.ts",
     "desktop:web:build": "npx vite build --config desktop/vite.config.ts",
     "desktop:dev": "npx @tauri-apps/cli dev --config src-tauri/tauri.conf.json",

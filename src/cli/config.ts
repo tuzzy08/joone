@@ -35,6 +35,28 @@ export interface JooneConfig {
   subAgentModel?: string;
   /** Execution mode: 'host' (local shell) or 'sandbox' (secure cloud). */
   executionMode?: "host" | "sandbox";
+  /** Desktop appearance preference. */
+  appearance?: "light" | "dark";
+  /** Desktop notification preferences. */
+  notifications?: {
+    permissions: boolean;
+    completionSummary: boolean;
+    needsAttention: boolean;
+  };
+  /** Desktop update preferences. */
+  updates?: {
+    autoCheck: boolean;
+  };
+  /** Persisted provider-specific connection settings for the desktop app. */
+  providerConnections?: Record<
+    string,
+    {
+      apiKey?: string;
+      baseUrl?: string;
+      connected?: boolean;
+      defaultModel?: string;
+    }
+  >;
 }
 
 /**
@@ -48,6 +70,21 @@ export const DEFAULT_CONFIG: JooneConfig = {
   streaming: true,
   permissionMode: "auto",
   executionMode: "host",
+  appearance: "light",
+  notifications: {
+    permissions: true,
+    completionSummary: true,
+    needsAttention: true,
+  },
+  updates: {
+    autoCheck: true,
+  },
+  providerConnections: {
+    anthropic: {
+      connected: false,
+      defaultModel: "claude-sonnet-4-20250514",
+    },
+  },
 };
 
 /**
@@ -79,12 +116,13 @@ export function loadConfig(configPath: string): JooneConfig {
     try {
       const raw = fs.readFileSync(configPath, "utf-8");
       const parsed = JSON.parse(raw) as Partial<JooneConfig>;
-      config = { ...DEFAULT_CONFIG, ...parsed };
+      config = migrateConfig({ ...DEFAULT_CONFIG, ...parsed });
     } catch (err) {
       console.warn(`Warning: Failed to parse config at ${configPath}. Using defaults.`);
       config = { ...DEFAULT_CONFIG };
     }
   }
+  config = migrateConfig(config);
   // Env var fallback: if apiKey is missing, check the provider's env var
   if (!config.apiKey) {
     const envVar = PROVIDER_ENV_VARS[config.provider];
@@ -102,11 +140,12 @@ export function loadConfig(configPath: string): JooneConfig {
  * Sets restrictive file permissions (owner-only read/write) for security.
  */
 export function saveConfig(configPath: string, config: JooneConfig): void {
+  const normalized = migrateConfig(config);
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), {
+  fs.writeFileSync(configPath, JSON.stringify(normalized, null, 2), {
     encoding: "utf-8",
     mode: 0o600, // Owner read/write only (Linux/macOS)
   });
@@ -124,4 +163,57 @@ export function saveConfig(configPath: string, config: JooneConfig): void {
  */
 export function getProviderEnvVar(provider: string): string | undefined {
   return PROVIDER_ENV_VARS[provider];
+}
+
+function migrateConfig(config: JooneConfig): JooneConfig {
+  const defaultNotifications = DEFAULT_CONFIG.notifications ?? {
+    permissions: true,
+    completionSummary: true,
+    needsAttention: true,
+  };
+  const defaultUpdates = DEFAULT_CONFIG.updates ?? {
+    autoCheck: true,
+  };
+  const providerConnections = {
+    ...(DEFAULT_CONFIG.providerConnections ?? {}),
+    ...(config.providerConnections ?? {}),
+  };
+
+  // Keep the active provider's nested connection settings in sync with the
+  // legacy top-level provider/model/apiKey fields so older config files and
+  // newer desktop settings can coexist without data loss.
+  const activeConnection = {
+    ...(providerConnections[config.provider] ?? {}),
+  };
+
+  if (!activeConnection.defaultModel) {
+    activeConnection.defaultModel = config.model;
+  }
+  if (config.apiKey && !activeConnection.apiKey) {
+    activeConnection.apiKey = config.apiKey;
+  }
+  if (activeConnection.connected === undefined) {
+    activeConnection.connected = false;
+  }
+
+  providerConnections[config.provider] = activeConnection;
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...config,
+    appearance: config.appearance ?? DEFAULT_CONFIG.appearance,
+    notifications: {
+      permissions: config.notifications?.permissions ?? defaultNotifications.permissions,
+      completionSummary:
+        config.notifications?.completionSummary ?? defaultNotifications.completionSummary,
+      needsAttention:
+        config.notifications?.needsAttention ?? defaultNotifications.needsAttention,
+    },
+    updates: {
+      autoCheck: config.updates?.autoCheck ?? defaultUpdates.autoCheck,
+    },
+    providerConnections,
+    apiKey: activeConnection.apiKey ?? config.apiKey,
+    model: activeConnection.defaultModel ?? config.model,
+  };
 }

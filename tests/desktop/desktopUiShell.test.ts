@@ -35,22 +35,33 @@ describe("Desktop UI shell", () => {
   });
 
   it("adds a desktop settings editor wired to config save", () => {
-    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const appSource = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const settingsSource = fs.readFileSync(
+      path.resolve("desktop/src/components/SettingsModal.tsx"),
+      "utf8",
+    );
+    const providerModalSource = fs.readFileSync(
+      path.resolve("desktop/src/components/ProviderConnectionModal.tsx"),
+      "utf8",
+    );
     const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
     const catalog = fs.readFileSync(
       path.resolve("src/desktop/providerCatalog.ts"),
       "utf8",
     );
 
-    expect(source).toContain("draftConfig");
-    expect(source).toContain("Save Settings");
-    expect(source).toContain("bridge.saveConfig");
-    expect(source).toContain("<select");
-    expect(source).toContain("providerOptions.map");
-    expect(source).toContain("availableModels.map");
-    expect(source).toContain("syncDraftProvider");
-    expect(source).not.toContain('<input\n                  className="input"\n                  value={draftConfig.provider}');
-    expect(source).not.toContain('<input\n                  className="input"\n                  value={draftConfig.model}');
+    expect(appSource).toContain("draftConfig");
+    expect(appSource).toContain("bridge.saveConfig");
+    expect(appSource).toContain("syncDraftProvider");
+    expect(settingsSource).toContain("Save Settings");
+    expect(settingsSource).toContain("<select");
+    expect(settingsSource).toContain("providerOptions.map");
+    expect(settingsSource).toContain("availableModels");
+    expect(settingsSource).toContain("Connect provider");
+    expect(settingsSource).toContain("Test connection");
+    expect(settingsSource).toContain("Check for updates");
+    expect(providerModalSource).toContain("API key");
+    expect(providerModalSource).toContain("Base URL");
     expect(styles).toContain(".settings-form");
     expect(styles).toContain(".settings-row");
     expect(styles).toContain(".toggle-row");
@@ -69,26 +80,25 @@ describe("Desktop UI shell", () => {
     expect(source).toContain("Pending prompts:");
     expect(source).toContain("Submit Answer");
     expect(styles).toContain(".hitl-card");
-    expect(styles).toContain(".hitl-queue");
   });
 
-  it("shows saved-time metadata and clearer resume state in the sessions panel", () => {
-    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
-    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
-    const types = fs.readFileSync(
-      path.resolve("desktop/src/bridge/types.ts"),
+  it("shows compact session cards with attention and resume state in the sidebar", () => {
+    const source = fs.readFileSync(
+      path.resolve("desktop/src/components/ShellSidebar.tsx"),
       "utf8",
     );
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
 
-    expect(types).toContain("lastSavedAt?: number");
     expect(source).toContain("resumingSessionId");
-    expect(source).toContain("formatSessionTimestamp");
-    expect(source).toContain("Last saved");
-    expect(source).toContain("Current session");
+    expect(source).toContain("attentionBySession");
+    expect(source).toContain("session-attention");
+    expect(source).toContain("describeSession(session)");
     expect(source).toContain("Resuming...");
-    expect(styles).toContain(".session-details");
-    expect(styles).toContain(".session-time");
-    expect(styles).toContain(".session-badge");
+    expect(source).toContain("Resume session");
+    expect(source).not.toContain("Last saved");
+    expect(styles).toContain(".session-card");
+    expect(styles).toContain(".session-card--active");
+    expect(styles).toContain(".session-attention");
   });
 
   it("restores focus and scroll position after resuming a session", () => {
@@ -112,9 +122,49 @@ describe("Desktop UI shell", () => {
     expect(source).toContain("Restoring session conversation...");
     expect(source).toContain("Pick up where you left off");
     expect(source).toContain("This session is ready for the next message.");
-    expect(source).toContain("hero-kicker");
     expect(styles).toContain(".conversation-state");
     expect(styles).toContain(".conversation-state--loading");
-    expect(styles).toContain(".hero-kicker");
+  });
+
+  it("moves desktop controls into a toggleable shell with a settings modal and composer footer metadata", () => {
+    const source = fs.readFileSync(path.resolve("desktop/src/App.tsx"), "utf8");
+    const sidebar = fs.readFileSync(
+      path.resolve("desktop/src/components/ShellSidebar.tsx"),
+      "utf8",
+    );
+    const settings = fs.readFileSync(
+      path.resolve("desktop/src/components/SettingsModal.tsx"),
+      "utf8",
+    );
+    const footer = fs.readFileSync(
+      path.resolve("desktop/src/components/ComposerFooter.tsx"),
+      "utf8",
+    );
+    const styles = fs.readFileSync(path.resolve("desktop/src/styles.css"), "utf8");
+
+    expect(source).toContain("sidebarExpanded");
+    expect(source).toContain("showSettingsModal");
+    expect(source).toContain("activeSettingsSection");
+    expect(settings).toContain("General");
+    expect(settings).toContain("Providers");
+    expect(settings).toContain("Connect provider");
+    expect(settings).toContain("Test connection");
+    expect(settings).toContain("Check for updates");
+    expect(footer).toContain("composer-footer");
+    expect(source).toContain("permissionModeLabel");
+    expect(source).toContain("workspaceContext");
+    expect(sidebar).toContain("Resume session");
+    expect(sidebar).toContain("settings-launch__icon");
+    expect(source).not.toContain("<h2>Workspace</h2>");
+    expect(source).not.toContain("Start Session");
+
+    expect(styles).toContain(".app-shell");
+    expect(styles).toContain(".sidebar-toggle");
+    expect(styles).toContain(".sidebar--collapsed");
+    expect(styles).toContain(".settings-modal");
+    expect(styles).toContain(".settings-nav");
+    expect(styles).toContain(".composer-footer");
+    expect(styles).toContain("--surface");
+    expect(styles).toContain('[data-theme="dark"]');
   });
 });

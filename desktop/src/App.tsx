@@ -4,28 +4,38 @@ import {
   PROVIDER_MODELS,
   SUPPORTED_PROVIDERS,
 } from "../../src/desktop/providerCatalog.js";
+import { ShellSidebar } from "./components/ShellSidebar";
+import { SettingsModal } from "./components/SettingsModal";
+import { ProviderConnectionModal } from "./components/ProviderConnectionModal";
+import { ComposerFooter } from "./components/ComposerFooter";
 import type {
   DesktopBridge,
   DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
-  DesktopMessage,
+  DesktopProviderConnection,
+  DesktopProviderConnectionResult,
   DesktopSessionSnapshot,
+  DesktopUpdateCheckResult,
+  DesktopWorkspaceContext,
 } from "./bridge/types";
 
-const INITIAL_VISIBLE_SESSIONS = 3;
 const MAX_TOOL_RUNS = 6;
+
+type SettingsSection = "general" | "providers";
 
 type PendingHitlPrompt =
   | {
       type: "question";
       id: string;
+      sessionId: string;
       question: string;
       options?: string[];
     }
   | {
       type: "permission";
       id: string;
+      sessionId: string;
       toolName: string;
       args: Record<string, unknown>;
     };
@@ -56,29 +66,39 @@ export function App() {
   const bridge = useMemo<DesktopBridge>(() => getDesktopBridge(), []);
   const [config, setConfig] = useState<DesktopConfig | null>(null);
   const [draftConfig, setDraftConfig] = useState<DesktopConfig | null>(null);
-  const [bridgeStatus, setBridgeStatus] = useState<DesktopBridgeStatus | null>(
-    null,
-  );
+  const [bridgeStatus, setBridgeStatus] = useState<DesktopBridgeStatus | null>(null);
+  const [workspaceContext, setWorkspaceContext] = useState<DesktopWorkspaceContext | null>(null);
   const [sessions, setSessions] = useState<DesktopSessionSnapshot[]>([]);
   const [showAllSessions, setShowAllSessions] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [activeSettingsSection, setActiveSettingsSection] =
+    useState<SettingsSection>("general");
+  const [activeSession, setActiveSession] = useState<DesktopSessionSnapshot | null>(null);
   const [resumingSessionId, setResumingSessionId] = useState<string | null>(null);
-  const [activeSession, setActiveSession] = useState<DesktopSessionSnapshot | null>(
-    null,
-  );
+  const [status, setStatus] = useState("Idle");
   const [input, setInput] = useState("");
   const [activity, setActivity] = useState<string[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
-  const [status, setStatus] = useState("Idle");
-  const [pendingHitlPrompts, setPendingHitlPrompts] = useState<
-    PendingHitlPrompt[]
-  >([]);
+  const [pendingHitlPrompts, setPendingHitlPrompts] = useState<PendingHitlPrompt[]>([]);
   const [hitlAnswer, setHitlAnswer] = useState("");
   const [sessionWorkstreams, setSessionWorkstreams] = useState<
     Record<string, SessionWorkstream>
   >({});
+  const [attentionBySession, setAttentionBySession] = useState<Record<string, string>>({});
+  const [providerModalProvider, setProviderModalProvider] = useState<string | null>(null);
+  const [providerModalDraft, setProviderModalDraft] = useState<DesktopProviderConnection>({});
+  const [testingProvider, setTestingProvider] = useState<string | null>(null);
+  const [providerFeedback, setProviderFeedback] = useState<
+    Record<string, DesktopProviderConnectionResult>
+  >({});
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateResult, setUpdateResult] = useState<DesktopUpdateCheckResult | null>(null);
+
   const retryActionRef = useRef<(() => Promise<void>) | null>(null);
   const conversationRef = useRef<HTMLElement | null>(null);
-  const composerInputRef = useRef<HTMLInputElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const autoCheckedUpdatesRef = useRef(false);
 
   useEffect(() => {
     void runAction(
@@ -88,6 +108,7 @@ export function App() {
           setConfig,
           setDraftConfig,
           setBridgeStatus,
+          setWorkspaceContext,
           setSessions,
           setActivity,
         ),
@@ -102,6 +123,15 @@ export function App() {
 
     setDraftConfig(config);
   }, [config]);
+
+  useEffect(() => {
+    if (!config?.updates.autoCheck || autoCheckedUpdatesRef.current) {
+      return;
+    }
+
+    autoCheckedUpdatesRef.current = true;
+    void checkForUpdates();
+  }, [config?.updates.autoCheck]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -139,12 +169,7 @@ export function App() {
 
       if (event.type === "tool:start") {
         updateSessionWorkstream(event.sessionId, (current) => ({
-          todos: setTodoState(
-            current.todos,
-            "tools",
-            "active",
-            `Running ${event.toolName}.`,
-          ),
+          todos: setTodoState(current.todos, "tools", "active", `Running ${event.toolName}.`),
           toolRuns: [
             {
               id: `${event.toolName}-${Date.now()}`,
@@ -159,18 +184,21 @@ export function App() {
 
       if (event.type === "tool:end") {
         updateSessionWorkstream(event.sessionId, (current) => ({
-          todos: setTodoState(
-            current.todos,
-            "tools",
-            "done",
-            `${event.toolName} completed.`,
-          ),
+          todos: setTodoState(current.todos, "tools", "done", `${event.toolName} completed.`),
           toolRuns: finalizeToolRun(current.toolRuns, event),
         }));
       }
 
       if (event.type === "session:completed") {
         setStatus("Idle");
+        setAttentionBySession((current) => {
+          const next = { ...current };
+          if (!pendingHitlPrompts.some((prompt) => prompt.sessionId === event.sessionId)) {
+            delete next[event.sessionId];
+          }
+          return next;
+        });
+        notifyForEvent(event);
         updateSessionWorkstream(event.sessionId, (current) => ({
           ...current,
           todos: completeTurnTodos(current.todos, current.toolRuns),
@@ -178,14 +206,17 @@ export function App() {
       }
 
       if (event.type === "session:error") {
+        setAttentionBySession((current) => ({
+          ...current,
+          [event.sessionId]: "Needs attention",
+        }));
         updateSessionWorkstream(event.sessionId, (current) => ({
           todos: current.todos.map((todo) =>
-            todo.state === "done"
-              ? todo
-              : { ...todo, state: "blocked", note: event.message }
+            todo.state === "done" ? todo : { ...todo, state: "blocked", note: event.message },
           ),
           toolRuns: failLatestToolRun(current.toolRuns, event.message),
         }));
+        notifyForEvent(event);
         reportError(new Error(event.message), "Runtime error");
       }
 
@@ -195,11 +226,17 @@ export function App() {
           {
             type: "question",
             id: event.id,
+            sessionId: event.sessionId,
             question: event.question,
             options: event.options,
           },
         ]);
+        setAttentionBySession((current) => ({
+          ...current,
+          [event.sessionId]: "Pending approval",
+        }));
         setStatus("Awaiting input");
+        notifyForEvent(event);
         updateSessionWorkstream(event.sessionId, (current) => ({
           ...current,
           todos: setTodoState(
@@ -217,11 +254,17 @@ export function App() {
           {
             type: "permission",
             id: event.id,
+            sessionId: event.sessionId,
             toolName: event.toolName,
             args: event.args,
           },
         ]);
+        setAttentionBySession((current) => ({
+          ...current,
+          [event.sessionId]: "Pending approval",
+        }));
         setStatus("Awaiting input");
+        notifyForEvent(event);
         updateSessionWorkstream(event.sessionId, (current) => ({
           ...current,
           todos: setTodoState(
@@ -233,36 +276,91 @@ export function App() {
         }));
       }
     });
-  }, [activeSession, bridge]);
+  }, [activeSession, bridge, pendingHitlPrompts, config]);
 
-  const startSession = async () => {
+  useEffect(() => {
+    scrollToConversationEnd();
+  }, [
+    activeSession?.sessionId,
+    activeSession?.messages.length,
+    sessionWorkstreams[activeSession?.sessionId ?? ""]?.toolRuns.length,
+    sessionWorkstreams[activeSession?.sessionId ?? ""]?.todos.length,
+  ]);
+
+  useEffect(() => {
+    if (pendingHitlPrompts.length > 0 || resumingSessionId) {
+      return;
+    }
+
+    focusComposer();
+  }, [activeSession?.sessionId, pendingHitlPrompts.length, resumingSessionId]);
+
+  const activeHitlPrompt = pendingHitlPrompts[0];
+  const activeWorkstream = activeSession
+    ? sessionWorkstreams[activeSession.sessionId] ?? emptyWorkstream()
+    : emptyWorkstream();
+  const activeProgress = getTodoProgress(activeWorkstream.todos);
+  const isRestoringSession = Boolean(
+    resumingSessionId && activeSession?.sessionId !== resumingSessionId,
+  );
+  const hasActiveMessages = (activeSession?.messages ?? []).length > 0;
+  const providerOptions = SUPPORTED_PROVIDERS;
+  const availableModels = draftConfig
+    ? PROVIDER_MODELS[draftConfig.provider] ?? []
+    : [];
+  const providerModalOption = providerOptions.find(
+    (provider) => provider.value === providerModalProvider,
+  ) ?? null;
+  const providerModalModels = providerModalProvider
+    ? PROVIDER_MODELS[providerModalProvider] ?? availableModels
+    : [];
+  const configDirty =
+    config != null &&
+    draftConfig != null &&
+    JSON.stringify(config) !== JSON.stringify(draftConfig);
+  const permissionModeLabel = mapPermissionMode(
+    workspaceContext?.permissionMode ?? draftConfig?.permissionMode ?? "auto",
+  );
+  const modelLabel = activeSession?.model ?? draftConfig?.model ?? "No model";
+  const gitBranchLabel = workspaceContext?.gitBranch ?? "No repo";
+  const runtimeLabel = bridgeStatus?.healthy
+    ? `${bridgeStatus.runtimeOwner ?? bridgeStatus.backend} ready`
+    : `${bridgeStatus?.runtimeOwner ?? "runtime"} offline`;
+  const currentTheme = draftConfig?.appearance ?? config?.appearance ?? "light";
+  const activeSessionTitle = activeSession ? describeSession(activeSession) : "No active session";
+  const activeAttention = activeSession ? attentionBySession[activeSession.sessionId] : null;
+
+  async function startSession() {
     await runAction(async () => {
-      const session = await bridge.startSession();
-      const normalized = normalizeSession(session);
-      setActiveSession(normalized);
-      setSessions((prev) => upsertSession(prev, normalized));
-      ensureSessionWorkstream(normalized.sessionId);
+      const session = normalizeSession(await bridge.startSession());
+      setActiveSession(session);
+      setSessions((prev) => upsertSession(prev, session));
+      setAttentionBySession((current) => {
+        const next = { ...current };
+        delete next[session.sessionId];
+        return next;
+      });
+      ensureSessionWorkstream(session.sessionId);
       setStatus("Idle");
     }, "Failed to start session");
-  };
+  }
 
-  const resumeSession = async (sessionId: string) => {
+  async function resumeSession(sessionId: string) {
     setResumingSessionId(sessionId);
     await runAction(async () => {
       try {
-        const session = await bridge.resumeSession(sessionId);
-        const normalized = normalizeSession(session);
-        setActiveSession(normalized);
-        setSessions((prev) => upsertSession(prev, normalized));
-        ensureSessionWorkstream(normalized.sessionId);
+        const session = normalizeSession(await bridge.resumeSession(sessionId));
+        setActiveSession(session);
+        setSessions((prev) => upsertSession(prev, session));
+        ensureSessionWorkstream(session.sessionId);
         setStatus("Idle");
       } finally {
         setResumingSessionId(null);
       }
     }, `Failed to resume ${sessionId}`);
-  };
+  }
 
-  const submit = async () => {
+  async function submit() {
     if (!input.trim()) {
       return;
     }
@@ -276,22 +374,25 @@ export function App() {
         setSessions((prev) => upsertSession(prev, session));
       }
 
+      setAttentionBySession((current) => {
+        const next = { ...current };
+        delete next[session.sessionId];
+        return next;
+      });
       setStatus("Thinking");
       setInput("");
-      setPendingHitlPrompts([]);
       updateSessionWorkstream(session.sessionId, (current) => ({
         todos: createTurnTodos(prompt),
         toolRuns: current.toolRuns,
       }));
 
-      const next = await bridge.submitMessage(session.sessionId, prompt);
-      const normalized = normalizeSession(next);
-      setActiveSession(normalized);
-      setSessions((prev) => upsertSession(prev, normalized));
+      const next = normalizeSession(await bridge.submitMessage(session.sessionId, prompt));
+      setActiveSession(next);
+      setSessions((prev) => upsertSession(prev, next));
     }, "Failed to send message");
-  };
+  }
 
-  const saveSettings = async () => {
+  async function saveSettings() {
     if (!draftConfig) {
       return;
     }
@@ -299,77 +400,45 @@ export function App() {
     await runAction(async () => {
       await bridge.saveConfig(draftConfig);
       setConfig(draftConfig);
+      setWorkspaceContext((current) =>
+        current
+          ? {
+              ...current,
+              permissionMode: draftConfig.permissionMode ?? current.permissionMode,
+            }
+          : current,
+      );
+      setShowSettingsModal(false);
       setStatus("Idle");
       setActivity((prev) => [
         `Settings saved for ${draftConfig.provider} / ${draftConfig.model}.`,
         ...prev,
       ].slice(0, 10));
     }, "Failed to save settings");
-  };
+  }
 
-  const configDirty =
-    config != null &&
-    draftConfig != null &&
-    (config.provider !== draftConfig.provider ||
-      config.model !== draftConfig.model ||
-      config.streaming !== draftConfig.streaming);
-  const providerOptions = SUPPORTED_PROVIDERS;
-  const availableModels = draftConfig
-    ? PROVIDER_MODELS[draftConfig.provider] ?? []
-    : [];
-  const visibleSessions = showAllSessions
-    ? sessions
-    : sessions.slice(0, INITIAL_VISIBLE_SESSIONS);
-  const activeHitlPrompt = pendingHitlPrompts[0];
-  const activeWorkstream = activeSession
-    ? sessionWorkstreams[activeSession.sessionId] ?? emptyWorkstream()
-    : emptyWorkstream();
-  const activeProgress = getTodoProgress(activeWorkstream.todos);
-  const isRestoringSession = Boolean(
-    resumingSessionId && activeSession?.sessionId !== resumingSessionId,
-  );
-  const hasActiveMessages = (activeSession?.messages ?? []).length > 0;
-  const heroKicker = isRestoringSession
-    ? "Restoring saved thread"
-    : activeSession
-      ? "Resumed thread"
-      : "Ready for a new session";
-  const heroDescription = isRestoringSession
-    ? "Loading the saved conversation so you land back on the latest message."
-    : activeSession
-      ? `${describeSession(activeSession)} · Last saved ${formatSessionTimestamp(
-          activeSession.lastSavedAt,
-        )}`
-      : "Shared-runtime desktop shell with browser fallback and Tauri adapter.";
-
-  useEffect(() => {
-    scrollToConversationEnd();
-  }, [
-    activeSession?.sessionId,
-    activeSession?.messages.length,
-    activeWorkstream.toolRuns.length,
-    activeWorkstream.todos.length,
-  ]);
-
-  useEffect(() => {
-    if (activeHitlPrompt || resumingSessionId) {
+  async function answerHitl() {
+    if (!activeHitlPrompt || !hitlAnswer.trim()) {
       return;
     }
 
-    focusComposer();
-  }, [activeHitlPrompt, resumingSessionId, activeSession?.sessionId]);
-
-  function ensureSessionWorkstream(sessionId: string) {
-    setSessionWorkstreams((current) => {
-      if (current[sessionId]) {
-        return current;
-      }
-
-      return {
-        ...current,
-        [sessionId]: emptyWorkstream(),
-      };
-    });
+    await runAction(async () => {
+      await bridge.answerHitl(activeHitlPrompt.id, hitlAnswer.trim());
+      const remaining = pendingHitlPrompts.slice(1);
+      setPendingHitlPrompts(remaining);
+      setHitlAnswer("");
+      setStatus("Thinking");
+      setAttentionBySession((current) => {
+        const next = { ...current };
+        const stillPending = remaining.some(
+          (prompt) => prompt.sessionId === activeHitlPrompt.sessionId,
+        );
+        if (!stillPending) {
+          delete next[activeHitlPrompt.sessionId];
+        }
+        return next;
+      });
+    }, "Failed to answer HITL prompt");
   }
 
   function updateDraftConfig(
@@ -387,15 +456,122 @@ export function App() {
   function syncDraftProvider(provider: string) {
     updateDraftConfig((current) => {
       const nextModels = PROVIDER_MODELS[provider] ?? [];
-      const fallbackModel = nextModels[0]?.value ?? current.model;
-      const hasCurrentModel = nextModels.some(
-        (modelOption) => modelOption.value === current.model,
-      );
+      const nextModel =
+        current.providerConnections[provider]?.defaultModel ??
+        nextModels[0]?.value ??
+        current.model;
 
       return {
         ...current,
         provider,
-        model: hasCurrentModel ? current.model : fallbackModel,
+        model: nextModel,
+      };
+    });
+  }
+
+  function openProviderModal(provider: string) {
+    if (!draftConfig) {
+      return;
+    }
+
+    setProviderModalProvider(provider);
+    setProviderModalDraft({
+      ...draftConfig.providerConnections[provider],
+      defaultModel:
+        draftConfig.providerConnections[provider]?.defaultModel ??
+        PROVIDER_MODELS[provider]?.[0]?.value,
+    });
+  }
+
+  function saveProviderModal() {
+    if (!providerModalProvider || !draftConfig) {
+      return;
+    }
+
+    updateDraftConfig((current) => ({
+      ...current,
+      providerConnections: {
+        ...current.providerConnections,
+        [providerModalProvider]: {
+          ...current.providerConnections[providerModalProvider],
+          ...providerModalDraft,
+          connected: Boolean(providerModalDraft.apiKey || providerModalDraft.baseUrl),
+        },
+      },
+    }));
+    setProviderModalProvider(null);
+  }
+
+  function disconnectProvider(provider: string) {
+    updateDraftConfig((current) => ({
+      ...current,
+      providerConnections: {
+        ...current.providerConnections,
+        [provider]: {
+          ...current.providerConnections[provider],
+          apiKey: undefined,
+          baseUrl: undefined,
+          connected: false,
+        },
+      },
+    }));
+    setProviderFeedback((current) => ({
+      ...current,
+      [provider]: {
+        ok: true,
+        message: `${provider} disconnected.`,
+      },
+    }));
+  }
+
+  async function testProviderConnection(provider: string) {
+    if (!draftConfig) {
+      return;
+    }
+
+    setTestingProvider(provider);
+    await runAction(async () => {
+      const result = await bridge.testProviderConnection(
+        provider,
+        draftConfig.providerConnections[provider] ?? {},
+      );
+      setProviderFeedback((current) => ({
+        ...current,
+        [provider]: result,
+      }));
+      if (result.ok) {
+        updateDraftConfig((current) => ({
+          ...current,
+          providerConnections: {
+            ...current.providerConnections,
+            [provider]: {
+              ...current.providerConnections[provider],
+              connected: true,
+            },
+          },
+        }));
+      }
+    }, `Failed to test ${provider} connection`);
+    setTestingProvider(null);
+  }
+
+  async function checkForUpdates() {
+    setCheckingUpdates(true);
+    await runAction(async () => {
+      setUpdateResult(await bridge.checkForUpdates());
+    }, "Failed to check for updates");
+    setCheckingUpdates(false);
+  }
+
+  function ensureSessionWorkstream(sessionId: string) {
+    setSessionWorkstreams((current) => {
+      if (current[sessionId]) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [sessionId]: emptyWorkstream(),
       };
     });
   }
@@ -411,23 +587,13 @@ export function App() {
   }
 
   function scrollToConversationEnd() {
+    if (!conversationRef.current) {
+      return;
+    }
+
     requestAnimationFrame(() => {
-      const container = conversationRef.current;
-      if (!container) {
-        return;
-      }
-
-      const latestEntry = container.lastElementChild as HTMLElement | null;
-      if (latestEntry) {
-        latestEntry.scrollIntoView({
-          block: "end",
-          behavior: "smooth",
-        });
-        return;
-      }
-
-      container.scrollTo({
-        top: container.scrollHeight,
+      conversationRef.current?.scrollTo({
+        top: conversationRef.current.scrollHeight,
         behavior: "smooth",
       });
     });
@@ -439,30 +605,17 @@ export function App() {
     });
   }
 
-  async function runAction(action: () => Promise<void>, context: string) {
+  function runAction(action: () => Promise<void>, context: string) {
     retryActionRef.current = action;
-    try {
-      await action();
-      retryActionRef.current = null;
-      setLastError(null);
-    } catch (error) {
-      reportError(error, context);
-    }
-  }
-
-  async function retryLastAction() {
-    const retry = retryActionRef.current;
-    if (!retry) {
-      return;
-    }
-
-    await runAction(retry, "Retry last action");
-  }
-
-  function dismissError() {
-    retryActionRef.current = null;
-    setLastError(null);
-    setStatus((current) => (current === "Error" ? "Idle" : current));
+    return action()
+      .then(() => {
+        retryActionRef.current = null;
+        setLastError(null);
+        setStatus((current) => (current === "Error" ? "Idle" : current));
+      })
+      .catch((error) => {
+        reportError(error, context);
+      });
   }
 
   function reportError(error: unknown, context: string) {
@@ -473,254 +626,92 @@ export function App() {
     setActivity((prev) => [`Error: ${nextError}`, ...prev].slice(0, 10));
   }
 
-  const submitHitlAnswer = async () => {
-    if (!activeHitlPrompt || !hitlAnswer.trim()) {
+  function notifyForEvent(event: DesktopEvent) {
+    if (!config) {
       return;
     }
 
-    await runAction(async () => {
-      await bridge.answerHitl(activeHitlPrompt.id, hitlAnswer.trim());
-      setPendingHitlPrompts((prev) => prev.slice(1));
-      if (activeSession) {
-        updateSessionWorkstream(activeSession.sessionId, (current) => ({
-          ...current,
-          todos: setTodoState(
-            current.todos,
-            "tools",
-            "active",
-            "Continuing after your input.",
-          ),
-        }));
-      }
-      setActivity((prev) => [
-        `Answered HITL prompt ${activeHitlPrompt.id}.`,
-        ...prev,
-      ].slice(0, 10));
-      setHitlAnswer("");
-      setStatus("Thinking");
-    }, "Failed to answer HITL prompt");
-  };
+    if (event.type === "hitl:permission" && config.notifications.permissions) {
+      void sendSystemNotification("Agent needs approval", `Approve ${event.toolName} to continue.`);
+    }
+    if (event.type === "hitl:question" && config.notifications.permissions) {
+      void sendSystemNotification("Agent needs an answer", event.question);
+    }
+    if (event.type === "session:error" && config.notifications.needsAttention) {
+      void sendSystemNotification("Agent needs attention", event.message);
+    }
+    if (event.type === "session:completed" && config.notifications.completionSummary) {
+      void sendSystemNotification("Agent completed its pass", "The current task is ready for review.");
+    }
+  }
 
   return (
-    <div className="shell">
-      {lastError ? (
-        <div className="toast-stack">
-          <section className="toast" role="alert">
-            <strong>Desktop error</strong>
-            <p>{lastError}</p>
-            <div className="toast-actions">
-              <button className="button" onClick={() => void retryLastAction()}>
-                Retry last action
-              </button>
-              <button className="ghost-button" onClick={() => dismissError()}>
-                Dismiss
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-      <aside className="sidebar">
-        <section className="panel">
-          <h2>Workspace</h2>
-          <p>{config ? `${config.provider} / ${config.model}` : "Loading..."}</p>
-          <p>Bridge: {bridgeStatus?.mode ?? "Loading..."}</p>
-          <p>
-            Runtime:{" "}
-            {bridgeStatus
-              ? bridgeStatus.healthy
-                ? `${bridgeStatus.backend} ready`
-                : `${bridgeStatus.backend} unavailable`
-              : "Checking..."}
-          </p>
-          <p className="error-text">Last error: {lastError ?? "None"}</p>
-          <strong>{activeSession?.sessionId ?? "No active session"}</strong>
-        </section>
+    <div className="app-shell" data-theme={currentTheme}>
+      <ShellSidebar
+        expanded={sidebarExpanded}
+        sessions={sessions}
+        activeSessionId={activeSession?.sessionId}
+        resumingSessionId={resumingSessionId}
+        showAllSessions={showAllSessions}
+        attentionBySession={attentionBySession}
+        onToggleSidebar={() => setSidebarExpanded((current) => !current)}
+        onStartSession={() => void startSession()}
+        onResumeSession={(sessionId) => void resumeSession(sessionId)}
+        onToggleShowAll={() => setShowAllSessions((current) => !current)}
+        onOpenSettings={() => {
+          setActiveSettingsSection("general");
+          setShowSettingsModal(true);
+        }}
+        updateAvailable={Boolean(updateResult?.available)}
+      />
 
-        <section className="panel">
-          <h2>Settings</h2>
-          {draftConfig ? (
-            <div className="settings-form">
-              <label className="settings-row">
-                <span>Provider</span>
-                <select
-                  className="input select-input"
-                  value={draftConfig.provider}
-                  onChange={(event) => syncDraftProvider(event.target.value)}
-                >
-                  {providerOptions.map((providerOption) => (
-                    <option key={providerOption.value} value={providerOption.value}>
-                      {providerOption.label}
-                    </option>
-                  ))}
-                </select>
-                <small className="settings-hint">
-                  {
-                    providerOptions.find(
-                      (providerOption) => providerOption.value === draftConfig.provider,
-                    )?.hint
-                  }
-                </small>
-              </label>
-
-              <label className="settings-row">
-                <span>Model</span>
-                <select
-                  className="input select-input"
-                  value={draftConfig.model}
-                  onChange={(event) =>
-                    updateDraftConfig({
-                      model: event.target.value,
-                    })
-                  }
-                >
-                  {availableModels.map((modelOption) => (
-                    <option key={modelOption.value} value={modelOption.value}>
-                      {modelOption.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="toggle-row">
-                <input
-                  type="checkbox"
-                  checked={draftConfig.streaming}
-                  onChange={(event) =>
-                    updateDraftConfig({
-                      streaming: event.target.checked,
-                    })
-                  }
-                />
-                <span>Streaming responses</span>
-              </label>
-
-              <button
-                className="button"
-                disabled={!configDirty}
-                onClick={() => void saveSettings()}
-              >
-                Save Settings
-              </button>
-            </div>
-          ) : (
-            <p>Loading settings...</p>
-          )}
-        </section>
-
-        <section className="panel">
-          <h2>Sessions</h2>
-          <div
-            className={`session-list${showAllSessions ? " session-list--expanded" : ""}`}
-          >
-            {sessions.length === 0 ? (
-              <p>No saved sessions yet.</p>
-            ) : (
-              <>
-                {visibleSessions.map((session) => (
-                  <button
-                    key={session.sessionId}
-                    className={`session-item${
-                      activeSession?.sessionId === session.sessionId ? " session-item--active" : ""
-                    }${
-                      resumingSessionId === session.sessionId ? " session-item--loading" : ""
-                    }`}
-                    disabled={resumingSessionId != null}
-                    onClick={() => void resumeSession(session.sessionId)}
-                  >
-                    <div className="session-item-header">
-                      <strong>{describeSession(session)}</strong>
-                      {activeSession?.sessionId === session.sessionId ? (
-                        <span className="session-badge">Current session</span>
-                      ) : null}
-                    </div>
-                    <span className="session-meta">{session.sessionId}</span>
-                    <div className="session-details">
-                      <span>{session.description ?? describeSession(session)}</span>
-                      <span className="session-time">
-                        Last saved {formatSessionTimestamp(session.lastSavedAt)}
-                      </span>
-                    </div>
-                    <span className="session-action">
-                      {resumingSessionId === session.sessionId ? "Resuming..." : "Resume session"}
-                    </span>
-                  </button>
-                ))}
-                {sessions.length > INITIAL_VISIBLE_SESSIONS ? (
-                  <button
-                    className="ghost-button session-toggle"
-                    onClick={() => setShowAllSessions((current) => !current)}
-                  >
-                    {showAllSessions
-                      ? "Show fewer"
-                      : `View more (${sessions.length - INITIAL_VISIBLE_SESSIONS})`}
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
-        </section>
-
-        <section className="panel">
-          <h2>Metrics</h2>
-          <p>Status: {status}</p>
-          <p>Tokens: {activeSession?.metrics.totalTokens ?? 0}</p>
-          <p>Tools: {activeSession?.metrics.toolCallCount ?? 0}</p>
-        </section>
-
-        <section className="panel">
-          <h2>Activity</h2>
-          <div className="activity-list">
-            {activity.length === 0 ? (
-              <p>No runtime events yet.</p>
-            ) : (
-              activity.map((entry, index) => <p key={index}>{entry}</p>)
-            )}
-          </div>
-        </section>
-      </aside>
-
-      <main className="main">
-        <header className="hero">
+      <main className="workspace-shell">
+        <header className="thread-header">
           <div>
-            <span className="hero-kicker">{heroKicker}</span>
-            <h1>Joone Desktop</h1>
-            <p>{heroDescription}</p>
+            <p className="thread-kicker">
+              {isRestoringSession ? "Restoring saved thread" : "Current session"}
+            </p>
+            <h1>{activeSessionTitle}</h1>
           </div>
-          <button className="button" onClick={() => void startSession()}>
-            Start Session
-          </button>
+          <div className="thread-header__meta">
+            {activeAttention ? <span className="header-attention">{activeAttention}</span> : null}
+            <span className="header-status">{status}</span>
+          </div>
         </header>
 
         <section className="conversation" ref={conversationRef}>
           {isRestoringSession ? (
             <article className="conversation-state conversation-state--loading">
               <strong>Restoring session conversation...</strong>
-              <p>We&apos;re loading the saved thread and bringing you back to the latest message.</p>
+              <p>Pulling the latest thread state back into the workspace.</p>
             </article>
           ) : !activeSession ? (
             <article className="conversation-state">
               <strong>Pick up where you left off</strong>
-              <p>Start a new session or resume one from the sidebar to continue coding.</p>
+              <p>Start a fresh session or resume a saved thread from the sidebar.</p>
             </article>
           ) : !hasActiveMessages ? (
             <article className="conversation-state">
               <strong>This session is ready for the next message.</strong>
-              <p>The thread is open, but there are no saved conversation turns yet.</p>
+              <p>Send a prompt below to kick off the agent workstream.</p>
             </article>
-          ) : (
-            activeSession?.messages.map((message, index) => (
-              <article key={`${message.role}-${index}`} className={`bubble bubble-${message.role}`}>
-                <span className="bubble-label">{labelForRole(message.role)}</span>
-                <div>{message.content}</div>
-              </article>
-            ))
-          )}
+          ) : null}
 
-          {activeWorkstream.todos.length > 0 ? (
+          {(activeSession?.messages ?? []).map((message, index) => (
+            <article
+              key={`${message.role}-${index}-${message.content.slice(0, 16)}`}
+              className={`bubble bubble-${message.role}`}
+            >
+              <span className="bubble-label">{message.role}</span>
+              <p>{message.content}</p>
+            </article>
+          ))}
+
+          {activeSession ? (
             <article className="work-card todo-card">
               <div className="work-card-header">
                 <div>
-                  <span className="eyebrow">Live progress</span>
+                  <span className="eyebrow">Workstream</span>
                   <strong>Agent workstream</strong>
                 </div>
                 <span className="status-chip">{activeProgress}% complete</span>
@@ -728,9 +719,9 @@ export function App() {
               <div className="todo-list">
                 {activeWorkstream.todos.map((todo) => (
                   <div key={todo.id} className={`todo-step todo-step--${todo.state}`}>
-                    <span className="todo-icon">{iconForTodo(todo.state)}</span>
+                    <strong>{todo.label}</strong>
                     <div>
-                      <strong>{todo.label}</strong>
+                      <span className="todo-state">{todo.state}</span>
                       <p>{todo.note}</p>
                     </div>
                   </div>
@@ -740,7 +731,10 @@ export function App() {
           ) : null}
 
           {activeWorkstream.toolRuns.map((toolRun) => (
-            <article key={toolRun.id} className={`work-card tool-card tool-card--${toolRun.status}`}>
+            <article
+              key={toolRun.id}
+              className={`work-card tool-card tool-card--${toolRun.status}`}
+            >
               <div className="work-card-header">
                 <div>
                   <span className="eyebrow">Tool call</span>
@@ -754,100 +748,150 @@ export function App() {
                       : "Needs attention"}
                 </span>
               </div>
-              {Object.keys(toolRun.args).length > 0 ? (
-                <div className="tool-block">
-                  <span className="tool-block-label">Arguments</span>
-                  <div className="tool-chip-row">
-                    {Object.entries(toolRun.args)
-                      .slice(0, 4)
-                      .map(([key, value]) => (
-                        <span key={key} className="tool-chip">
-                          {key}: {formatValue(value)}
-                        </span>
-                      ))}
-                  </div>
-                </div>
-              ) : null}
-              {toolRun.result ? (
-                <div className="tool-block">
-                  <span className="tool-block-label">Result</span>
-                  <p className="tool-result">{summarizeText(toolRun.result, 180)}</p>
-                </div>
-              ) : null}
+              <pre className="tool-args">{JSON.stringify(toolRun.args, null, 2)}</pre>
+              {toolRun.result ? <p className="tool-result">{toolRun.result}</p> : null}
             </article>
           ))}
         </section>
 
         {activeHitlPrompt ? (
           <section className="hitl-card">
-            <strong>Human-in-the-loop</strong>
-            {activeHitlPrompt.type === "question" ? (
-              <>
-                <p>{activeHitlPrompt.question}</p>
-                {activeHitlPrompt.options?.length ? (
-                  <div className="hitl-queue">
-                    {activeHitlPrompt.options.map((option) => (
-                      <span key={option}>{option}</span>
-                    ))}
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <p>Allow tool execution for `{activeHitlPrompt.toolName}`?</p>
-                <div className="hitl-queue">
-                  {Object.entries(activeHitlPrompt.args).map(([key, value]) => (
-                    <span key={key}>{`${key}: ${String(value)}`}</span>
-                  ))}
-                </div>
-              </>
-            )}
-            {pendingHitlPrompts.length > 1 ? (
-              <p>Pending prompts: {pendingHitlPrompts.length - 1}</p>
+            <div className="work-card-header">
+              <div>
+                <span className="eyebrow">Action required</span>
+                <strong>
+                  {activeHitlPrompt.type === "question"
+                    ? activeHitlPrompt.question
+                    : `Approve ${activeHitlPrompt.toolName}`}
+                </strong>
+              </div>
+              <span className="status-chip status-chip--error">
+                Pending prompts: {pendingHitlPrompts.length}
+              </span>
+            </div>
+            {activeHitlPrompt.type === "permission" ? (
+              <pre className="tool-args">{JSON.stringify(activeHitlPrompt.args, null, 2)}</pre>
             ) : null}
-            <div className="composer">
-              <input
-                className="input"
-                placeholder={
-                  activeHitlPrompt.type === "permission"
-                    ? "Type y / n or approve / reject"
-                    : "Type your answer"
-                }
-                value={hitlAnswer}
-                onChange={(event) => setHitlAnswer(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    void submitHitlAnswer();
-                  }
-                }}
-              />
-              <button className="button" onClick={() => void submitHitlAnswer()}>
+            <textarea
+              className="composer-input"
+              value={hitlAnswer}
+              onChange={(event) => setHitlAnswer(event.target.value)}
+              placeholder="Type your answer or approval..."
+              rows={3}
+            />
+            <div className="composer-actions">
+              <button type="button" className="primary-button" onClick={() => void answerHitl()}>
                 Submit Answer
               </button>
             </div>
           </section>
         ) : null}
 
-        {!activeHitlPrompt ? (
-          <footer className="composer">
-            <input
+        <section className="composer-shell">
+          <form
+            className="composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+          >
+            <textarea
               ref={composerInputRef}
-              className="input"
-              placeholder="What should we build today?"
+              className="composer-input"
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  void submit();
-                }
-              }}
+              placeholder="Ask Joone to inspect, edit, run, or explain..."
+              rows={4}
             />
-            <button className="button" onClick={() => void submit()}>
-              Send
-            </button>
-          </footer>
-        ) : null}
+            <div className="composer-actions">
+              <button type="submit" className="primary-button">
+                Send
+              </button>
+            </div>
+          </form>
+
+          <ComposerFooter
+            modelLabel={modelLabel}
+            permissionLabel={permissionModeLabel}
+            gitBranchLabel={gitBranchLabel}
+            runtimeLabel={runtimeLabel}
+            onOpenProviders={() => {
+              setActiveSettingsSection("providers");
+              setShowSettingsModal(true);
+            }}
+            onOpenGeneral={() => {
+              setActiveSettingsSection("general");
+              setShowSettingsModal(true);
+            }}
+          />
+        </section>
       </main>
+
+      {lastError ? (
+        <div className="toast-stack">
+          <div className="toast">
+            <strong>Last error</strong>
+            <p>{lastError}</p>
+            <div className="toast-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  const retry = retryActionRef.current;
+                  if (retry) {
+                    void runAction(retry, "Retry failed");
+                  }
+                }}
+              >
+                Retry last action
+              </button>
+              <button
+                type="button"
+                className="ghost-link"
+                onClick={() => setLastError(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <SettingsModal
+        open={showSettingsModal}
+        section={activeSettingsSection}
+        draftConfig={draftConfig}
+        providerOptions={providerOptions}
+        availableModels={availableModels}
+        configDirty={configDirty}
+        checkingUpdates={checkingUpdates}
+        testingProvider={testingProvider}
+        updateResult={updateResult}
+        providerFeedback={providerFeedback}
+        onClose={() => setShowSettingsModal(false)}
+        onSave={() => void saveSettings()}
+        onSetSection={setActiveSettingsSection}
+        onDraftChange={updateDraftConfig}
+        onSyncProvider={syncDraftProvider}
+        onOpenProviderModal={openProviderModal}
+        onDisconnectProvider={disconnectProvider}
+        onTestProvider={(provider) => void testProviderConnection(provider)}
+        onCheckUpdates={() => void checkForUpdates()}
+      />
+
+      <ProviderConnectionModal
+        provider={providerModalOption}
+        connection={providerModalDraft}
+        models={providerModalModels}
+        onClose={() => setProviderModalProvider(null)}
+        onChange={(patch) =>
+          setProviderModalDraft((current) => ({
+            ...current,
+            ...patch,
+          }))
+        }
+        onSave={saveProviderModal}
+      />
     </div>
   );
 }
@@ -857,11 +901,13 @@ async function hydrateShell(
   setConfig: (config: DesktopConfig) => void,
   setDraftConfig: (config: DesktopConfig) => void,
   setBridgeStatus: (status: DesktopBridgeStatus) => void,
+  setWorkspaceContext: (workspace: DesktopWorkspaceContext) => void,
   setSessions: (sessions: DesktopSessionSnapshot[]) => void,
   setActivity: React.Dispatch<React.SetStateAction<string[]>>,
 ) {
-  const [bridgeStatus, config, sessions] = await Promise.all([
+  const [bridgeStatus, workspaceContext, config, sessions] = await Promise.all([
     bridge.getStatus(),
+    bridge.getWorkspaceContext(),
     bridge.loadConfig(),
     bridge.listSessions(),
   ]);
@@ -869,111 +915,49 @@ async function hydrateShell(
   setConfig(config);
   setDraftConfig(config);
   setBridgeStatus(bridgeStatus);
+  setWorkspaceContext(workspaceContext);
   setSessions(sessions.map((session) => normalizeSession(session)));
   setActivity([
     `Desktop shell ready via ${bridgeStatus.mode} bridge (${bridgeStatus.backend}).`,
   ]);
 }
 
-function upsertSession(
-  sessions: DesktopSessionSnapshot[],
-  next: DesktopSessionSnapshot,
-) {
-  const filtered = sessions.filter((session) => session.sessionId !== next.sessionId);
-  return [next, ...filtered];
-}
-
-function normalizeSession(session: DesktopSessionSnapshot): DesktopSessionSnapshot {
-  return {
-    ...session,
-    description: session.description ?? describeSession(session),
-    messages: Array.isArray(session.messages) ? session.messages : [],
-    metrics: session.metrics ?? {
-      totalTokens: 0,
-      cacheHitRate: 0,
-      toolCallCount: 0,
-      turnCount: 0,
-      totalCost: 0,
-    },
-  };
-}
-
-function describeSession(session: DesktopSessionSnapshot): string {
-  const candidate =
-    session.description ??
-    session.messages.find((message) => message.role === "user")?.content ??
-    session.messages.find((message) => message.role === "agent")?.content ??
-    "Untitled session";
-
-  const normalized = candidate.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return "Untitled session";
+async function sendSystemNotification(title: string, body: string) {
+  if (typeof Notification === "undefined") {
+    return;
   }
 
-  return normalized.length > 72 ? `${normalized.slice(0, 69)}...` : normalized;
-}
-
-function formatSessionTimestamp(lastSavedAt?: number): string {
-  if (!lastSavedAt) {
-    return "just now";
+  if (Notification.permission === "default") {
+    await Notification.requestPermission();
   }
 
-  const elapsedMs = Date.now() - lastSavedAt;
-  if (elapsedMs < 60_000) {
-    return "just now";
-  }
-
-  const elapsedMinutes = Math.floor(elapsedMs / 60_000);
-  if (elapsedMinutes < 60) {
-    return `${elapsedMinutes}m ago`;
-  }
-
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours < 24) {
-    return `${elapsedHours}h ago`;
-  }
-
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  if (elapsedDays < 7) {
-    return `${elapsedDays}d ago`;
-  }
-
-  return new Date(lastSavedAt).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function describeEvent(event: DesktopEvent): string {
-  switch (event.type) {
-    case "session:started":
-      return `Started ${event.sessionId}`;
-    case "session:status":
-      return `Session ${event.status}`;
-    case "session:completed":
-      return `Completed ${event.sessionId}`;
-    case "session:error":
-      return `Error: ${event.message}`;
-    case "tool:start":
-      return `Tool ${event.toolName} started`;
-    case "tool:end":
-      return `Tool ${event.toolName} finished`;
-    case "agent:token":
-      return `Streaming token: ${event.token}`;
-    case "hitl:question":
-      return `Question requested: ${event.question}`;
-    case "hitl:permission":
-      return `Permission requested for ${event.toolName}`;
-    default:
-      return event.type;
+  if (Notification.permission === "granted") {
+    new Notification(title, { body });
   }
 }
 
 function emptyWorkstream(): SessionWorkstream {
   return {
-    todos: [],
+    todos: [
+      {
+        id: "request",
+        label: "Review request",
+        note: "Waiting for the next instruction.",
+        state: "pending",
+      },
+      {
+        id: "tools",
+        label: "Run tools",
+        note: "No tool calls have started yet.",
+        state: "pending",
+      },
+      {
+        id: "response",
+        label: "Draft response",
+        note: "No response in progress.",
+        state: "pending",
+      },
+    ],
     toolRuns: [],
   };
 }
@@ -982,54 +966,23 @@ function createTurnTodos(prompt: string): WorkTodo[] {
   return [
     {
       id: "request",
-      label: "Understand the request",
-      note: summarizeText(prompt, 96),
+      label: "Review request",
+      note: summarizeText(prompt, 90),
       state: "done",
     },
     {
       id: "tools",
-      label: "Inspect files and run tools",
-      note: "Waiting for the next action.",
+      label: "Run tools",
+      note: "Preparing the right tool sequence.",
       state: "active",
     },
     {
       id: "response",
-      label: "Draft the response",
-      note: "Will start once the agent has enough context.",
+      label: "Draft response",
+      note: "Waiting for tool results.",
       state: "pending",
     },
   ];
-}
-
-function completeTurnTodos(
-  todos: WorkTodo[],
-  toolRuns: ToolRunCard[],
-): WorkTodo[] {
-  return todos.map((todo) => {
-    if (todo.id === "tools") {
-      return {
-        ...todo,
-        state: "done",
-        note:
-          toolRuns.length > 0
-            ? "Tool work finished successfully."
-            : "No tool calls were needed for this reply.",
-      };
-    }
-
-    if (todo.id === "response") {
-      return {
-        ...todo,
-        state: "done",
-        note: "Reply delivered to the conversation.",
-      };
-    }
-
-    return {
-      ...todo,
-      state: "done",
-    };
-  });
 }
 
 function setTodoState(
@@ -1039,6 +992,37 @@ function setTodoState(
   note: string,
 ): WorkTodo[] {
   return todos.map((todo) => (todo.id === id ? { ...todo, state, note } : todo));
+}
+
+function completeTurnTodos(todos: WorkTodo[], toolRuns: ToolRunCard[]): WorkTodo[] {
+  const hadToolFailure = toolRuns.some((toolRun) => toolRun.status === "error");
+
+  return todos.map((todo) => {
+    if (todo.id === "tools") {
+      return {
+        ...todo,
+        state: hadToolFailure ? "blocked" : "done",
+        note: hadToolFailure ? "A tool run needs review." : "Tool activity wrapped up cleanly.",
+      };
+    }
+
+    if (todo.id === "response") {
+      return {
+        ...todo,
+        state: hadToolFailure ? "blocked" : "done",
+        note: hadToolFailure
+          ? "The response was interrupted by a runtime issue."
+          : "Response is ready for review.",
+      };
+    }
+
+    return todo;
+  });
+}
+
+function getTodoProgress(todos: WorkTodo[]): number {
+  const completed = todos.filter((todo) => todo.state === "done").length;
+  return Math.round((completed / todos.length) * 100);
 }
 
 function finalizeToolRun(
@@ -1051,7 +1035,7 @@ function finalizeToolRun(
       updated = true;
       return {
         ...toolRun,
-        status: "success",
+        status: "success" as const,
         result: event.result,
         args: event.args ?? toolRun.args,
       };
@@ -1092,23 +1076,64 @@ function failLatestToolRun(toolRuns: ToolRunCard[], message: string): ToolRunCar
   });
 }
 
-function getTodoProgress(todos: WorkTodo[]): number {
-  if (todos.length === 0) {
-    return 0;
-  }
-
-  const completed = todos.filter((todo) => todo.state === "done").length;
-  return Math.round((completed / todos.length) * 100);
+function normalizeSession(session: DesktopSessionSnapshot): DesktopSessionSnapshot {
+  return {
+    ...session,
+    description: session.description ?? describeSession(session),
+    messages: session.messages ?? [],
+    metrics: session.metrics ?? {
+      totalTokens: 0,
+      cacheHitRate: 0,
+      toolCallCount: 0,
+      turnCount: 0,
+      totalCost: 0,
+    },
+  };
 }
 
-function labelForRole(role: DesktopMessage["role"]): string {
-  switch (role) {
-    case "user":
-      return "You";
-    case "agent":
-      return "Joone";
+function upsertSession(
+  sessions: DesktopSessionSnapshot[],
+  incoming: DesktopSessionSnapshot,
+): DesktopSessionSnapshot[] {
+  const next = sessions.filter((session) => session.sessionId !== incoming.sessionId);
+  return [incoming, ...next].sort(
+    (left, right) => (right.lastSavedAt ?? 0) - (left.lastSavedAt ?? 0),
+  );
+}
+
+function describeSession(session: DesktopSessionSnapshot): string {
+  const label = session.description?.trim();
+  if (label) {
+    return label;
+  }
+
+  return session.sessionId;
+}
+
+function describeEvent(event: DesktopEvent): string {
+  switch (event.type) {
+    case "session:started":
+      return `Started ${event.sessionId}`;
+    case "session:status":
+      return `Session ${event.status}`;
+    case "session:completed":
+      return `Completed ${event.sessionId}`;
+    case "session:error":
+      return `Error: ${event.message}`;
+    case "agent:token":
+      return "Streaming response";
+    case "tool:start":
+      return `Running ${event.toolName}`;
+    case "tool:end":
+      return `${event.toolName} finished`;
+    case "hitl:question":
+      return "Awaiting answer";
+    case "hitl:permission":
+      return `Awaiting approval for ${event.toolName}`;
+    case "session:state":
+      return `State updated for ${event.sessionId}`;
     default:
-      return "System";
+      return event.type;
   }
 }
 
@@ -1121,39 +1146,15 @@ function capitalizeStatus(status: "idle" | "processing" | "closed"): string {
 }
 
 function summarizeText(value: string, limit: number): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= limit) {
-    return normalized;
-  }
-
-  return `${normalized.slice(0, limit - 3)}...`;
+  return value.length > limit ? `${value.slice(0, limit)}...` : value;
 }
 
-function formatValue(value: unknown): string {
-  if (typeof value === "string") {
-    return summarizeText(value, 40);
+function mapPermissionMode(value: "auto" | "ask_all" | "ask_dangerous"): string {
+  if (value === "ask_all") {
+    return "Human in the loop";
   }
-
-  if (value == null) {
-    return "null";
+  if (value === "ask_dangerous") {
+    return "Ask for dangerous actions";
   }
-
-  try {
-    return summarizeText(JSON.stringify(value), 40);
-  } catch {
-    return summarizeText(String(value), 40);
-  }
-}
-
-function iconForTodo(state: WorkTodoState): string {
-  switch (state) {
-    case "done":
-      return "Done";
-    case "active":
-      return "Now";
-    case "blocked":
-      return "Hold";
-    default:
-      return "Next";
-  }
+  return "Full access";
 }

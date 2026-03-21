@@ -5,7 +5,11 @@ import type {
   DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
+  DesktopProviderConnection,
+  DesktopProviderConnectionResult,
   DesktopSessionSnapshot,
+  DesktopUpdateCheckResult,
+  DesktopWorkspaceContext,
 } from "./types";
 
 export function createTauriDesktopBridge(): DesktopBridge {
@@ -13,11 +17,26 @@ export function createTauriDesktopBridge(): DesktopBridge {
     async getStatus() {
       return invoke<DesktopBridgeStatus>("runtime_status");
     },
+    async getWorkspaceContext() {
+      return invoke<DesktopWorkspaceContext>("runtime_workspace_context");
+    },
     async loadConfig() {
       return invoke<DesktopConfig>("runtime_load_config");
     },
     async saveConfig(config) {
       await invoke("runtime_save_config", { config });
+    },
+    async testProviderConnection(provider, connection) {
+      return invoke<DesktopProviderConnectionResult>(
+        "runtime_test_provider_connection",
+        {
+          provider,
+          connection,
+        },
+      );
+    },
+    async checkForUpdates() {
+      return invoke<DesktopUpdateCheckResult>("runtime_check_updates");
     },
     async answerHitl(id, answer) {
       await invoke("runtime_answer_hitl", { id, answer });

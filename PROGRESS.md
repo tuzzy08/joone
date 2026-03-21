@@ -13,13 +13,55 @@ _This document serves as a living changelog and status board. Any human or agent
 
 ## Next Steps
 
-1.  **Milestone 20**: Continue the phased Tauri desktop MVP on top of the new shared runtime layer.
-2.  **Desktop IPC Wiring**: Connect the Tauri shell commands/events to the Node runtime service end-to-end.
-3.  **Desktop Packaging**: Add the remaining frontend/tooling dependencies and CI packaging once the local MVP loop is interactive.
+1.  **Milestone 20**: Run manual packaged-app smoke testing now that the installed desktop app owns its bundled runtime.
+2.  **Desktop Validation**: Verify installed Windows/macOS/Linux flows for settings, provider connection, session lifecycle, HITL, and clean shutdown.
+3.  **Post-Smoke Cleanup**: Decide whether the browser fallback and HTTP dev bridge stay as intentional developer tools or should be trimmed.
 
 ---
 
 ## Changelog
+
+### 2026-03-20: Desktop Visual Overhaul + Packaged Runtime Ownership (COMPLETE)
+
+- Reworked the desktop shell into a viewport-locked operator layout in `desktop/src/App.tsx` and new subcomponents:
+  - `desktop/src/components/ShellSidebar.tsx`
+  - `desktop/src/components/SettingsModal.tsx`
+  - `desktop/src/components/ProviderConnectionModal.tsx`
+  - `desktop/src/components/ComposerFooter.tsx`
+- The desktop app now has:
+  - a toggleable sidebar with compact session cards
+  - per-session attention indicators for queued HITL/error states
+  - a composer footer for model, permission mode, branch, and runtime status
+  - a modal settings center with `General` and `Providers` sections
+  - grey/white light theme tokens plus a dark mode switch through `data-theme="dark"`
+- Expanded the shared desktop/runtime config model in `src/cli/config.ts` and `desktop/src/bridge/types.ts` with:
+  - `appearance`
+  - `notifications`
+  - `updates`
+  - `providerConnections`
+  - desktop-facing `permissionMode`
+- Added config migration so older `~/.joone/config.json` files are normalized automatically on load/save without manual intervention.
+- Expanded the shared runtime/desktop contract:
+  - `src/runtime/service.ts` now exposes workspace metadata, provider connection testing, and desktop update checks
+  - `src/desktop/server.ts` now serves `/status`, `/workspace/context`, `/providers/:provider/test`, and `/updates/check`
+  - native Tauri bridge commands now cover that same surface
+- Fixed the installed desktop app runtime model:
+  - added `src/desktop/runtimeEntry.ts`
+  - added `src/desktop/prepareRuntimeBundle.ts`
+  - updated `src-tauri/src/main.rs` so packaged Tauri builds launch and manage a bundled Node runtime sidecar automatically
+  - updated `src-tauri/tauri.conf.json` so the runtime sidecar and runtime assets are packaged with the desktop build
+- Added/updated regressions for the slice:
+  - `tests/runtime/runtimeService.test.ts`
+  - `tests/desktop/desktopOwnedRuntime.test.ts`
+  - `tests/desktop/desktopUiShell.test.ts`
+  - `tests/desktop/desktopRuntimeServer.test.ts`
+  - `tests/desktop/tauriRuntimeBridge.test.ts`
+- Verification completed:
+  - `npm test -- tests/desktop/desktopUiShell.test.ts tests/desktop/tauriRuntimeBridge.test.ts tests/desktop/desktopRuntimeServer.test.ts tests/runtime/runtimeService.test.ts tests/desktop/desktopOwnedRuntime.test.ts`
+  - `npm run build`
+  - `npm run desktop:web:build`
+  - `npm run desktop:prepare-runtime`
+  - `cargo check --manifest-path src-tauri/Cargo.toml`
 
 ### 2026-03-13: Post-M19 Bugfix - First-Turn Deep Agent Crash (COMPLETE)
 

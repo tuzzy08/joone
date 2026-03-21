@@ -1,5 +1,7 @@
 import * as path from "node:path";
 import * as os from "node:os";
+import * as fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import { HumanMessage } from "@langchain/core/messages";
 import { loadConfig, saveConfig, type JooneConfig } from "../cli/config.js";
 import type { ContextState } from "../core/promptBuilder.js";
@@ -82,6 +84,128 @@ export class JooneRuntimeService {
 
   async saveConfig(config: JooneConfig): Promise<void> {
     saveConfig(this.configPath, config);
+  }
+
+  async getWorkspaceContext(): Promise<{
+    gitBranch: string | null;
+    permissionMode: "auto" | "ask_dangerous" | "ask_all";
+    executionMode: "host" | "sandbox";
+  }> {
+    const config = await this.loadConfig();
+    return {
+      gitBranch: detectGitBranch(this.cwd),
+      permissionMode: config.permissionMode ?? "auto",
+      executionMode: config.executionMode ?? "host",
+    };
+  }
+
+  async testProviderConnection(
+    provider: string,
+    connection: {
+      apiKey?: string;
+      baseUrl?: string;
+      connected?: boolean;
+      defaultModel?: string;
+    },
+  ): Promise<{ ok: boolean; message: string }> {
+    if (provider === "ollama") {
+      if (!connection.baseUrl?.trim()) {
+        return {
+          ok: false,
+          message: "Enter an Ollama base URL before testing the connection.",
+        };
+      }
+
+      try {
+        const response = await fetch(`${connection.baseUrl.replace(/\/$/, "")}/api/tags`);
+        if (!response.ok) {
+          return {
+            ok: false,
+            message: `Ollama responded with ${response.status}.`,
+          };
+        }
+      } catch (error: any) {
+        return {
+          ok: false,
+          message: error.message,
+        };
+      }
+
+      return {
+        ok: true,
+        message: `Connected to Ollama at ${connection.baseUrl}.`,
+      };
+    }
+
+    if (!connection.apiKey?.trim()) {
+      return {
+        ok: false,
+        message: `Enter an API key for ${provider} before testing the connection.`,
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Credentials for ${provider} are ready to use.`,
+    };
+  }
+
+  async checkForUpdates(): Promise<{
+    checkedAt: number;
+    available: boolean;
+    currentVersion: string;
+    latestVersion?: string;
+    downloadUrl?: string;
+    message: string;
+  }> {
+    const checkedAt = Date.now();
+    const currentVersion = readPackageVersion(this.cwd) ?? "0.0.0";
+
+    try {
+      const response = await fetch(
+        "https://api.github.com/repos/tuzzy08/joone/releases/latest",
+        {
+          headers: {
+            "user-agent": "joone-desktop",
+            accept: "application/vnd.github+json",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        return {
+          checkedAt,
+          available: false,
+          currentVersion,
+          message: `Update check failed with ${response.status}.`,
+        };
+      }
+
+      const release = (await response.json()) as {
+        tag_name?: string;
+        html_url?: string;
+      };
+      const latestVersion = release.tag_name?.replace(/^v/, "");
+      const available = Boolean(latestVersion && latestVersion !== currentVersion);
+
+      return {
+        checkedAt,
+        available,
+        currentVersion,
+        latestVersion,
+        downloadUrl: release.html_url,
+        message: available
+          ? `Version ${latestVersion} is available.`
+          : "You are already on the latest release.",
+      };
+    } catch (error: any) {
+      return {
+        checkedAt,
+        available: false,
+        currentVersion,
+        message: `Update check failed: ${error.message}`,
+      };
+    }
   }
 
   async listSessions(): Promise<RuntimeSessionSnapshot[]> {
@@ -529,4 +653,34 @@ function createDefaultRuntimeHarnessFactory(): RuntimeHarnessFactory {
       },
     };
   };
+}
+
+function detectGitBranch(cwd: string): string | null {
+  const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+    cwd,
+    encoding: "utf8",
+    timeout: 2000,
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const branch = result.stdout.trim();
+  return branch.length > 0 ? branch : null;
+}
+
+function readPackageVersion(cwd: string): string | null {
+  const packagePath = path.join(cwd, "package.json");
+  if (!fs.existsSync(packagePath)) {
+    return null;
+  }
+
+  try {
+    const raw = fs.readFileSync(packagePath, "utf8");
+    const parsed = JSON.parse(raw) as { version?: string };
+    return parsed.version ?? null;
+  } catch {
+    return null;
+  }
 }

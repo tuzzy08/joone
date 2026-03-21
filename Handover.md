@@ -173,6 +173,15 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 - `desktop/src/App.tsx` and `desktop/src/styles.css` now render human-readable `Last saved ...` metadata for session cards, a `Current session` badge for the active thread, and a `Resuming...` loading state that disables competing resume actions while a session is loading.
 - A follow-up resume UX slice now restores the actual conversation affordances after resume. `desktop/src/App.tsx` uses a `conversationRef` to scroll the restored session back to the newest entry and a `composerInputRef` to return keyboard focus to the main composer once resume completes, unless a HITL prompt is currently blocking input.
 - The final pre-packaging desktop UX slice cleans up restored-thread states. `desktop/src/App.tsx` now distinguishes between "restoring a saved thread", "no active session yet", and "active session with no saved turns" instead of falling back to one generic placeholder, and `desktop/src/styles.css` adds matching `conversation-state` styling plus a `hero-kicker` cue in the shell header.
+- The latest Milestone 20 slice is a combined desktop overhaul plus packaged-runtime ownership fix:
+  - `desktop/src/App.tsx` is now a viewport-locked operator shell with a toggleable sidebar, thread header, dedicated conversation timeline, persistent composer shell, and footer metadata pills.
+  - `desktop/src/components/ShellSidebar.tsx` keeps saved sessions compact, showing only session title plus `Resume session`, while surfacing per-session attention indicators for queued HITL prompts and runtime errors.
+  - Desktop settings are now modal-first. `desktop/src/components/SettingsModal.tsx` and `ProviderConnectionModal.tsx` add `General` and `Providers` sections with appearance switching, notification toggles, update checks, permission-mode controls, provider connection management, and provider-specific connect/edit flows.
+  - `src/cli/config.ts` now migrates and persists desktop-facing settings (`appearance`, `notifications`, `updates`, `providerConnections`) so older `~/.joone/config.json` files keep working without manual edits.
+  - `src/runtime/service.ts` now exposes desktop-visible workspace/runtime metadata, provider connection tests, and release update checks for both the HTTP dev path and the native Tauri path.
+  - The packaged Tauri app no longer assumes an external runtime server already exists. `src-tauri/src/main.rs` now launches and owns a bundled Node sidecar running `dist/desktop/runtimeEntry.js`, waits for health before serving native commands, and shuts that managed runtime down on app exit.
+  - `src/desktop/prepareRuntimeBundle.ts` and `src-tauri/tauri.conf.json` now package the runtime sidecar and runtime assets as part of desktop builds, which fixes the older installed-app `runtime unavailable` failure mode.
+  - The light theme has been redesigned around grey/white surfaces with tokenized CSS variables, and dark mode now swaps the same shell via `data-theme="dark"` rather than a separate layout branch.
 
 ### Tool Routing Summary
 
@@ -195,3 +204,15 @@ All development follows strict TDD. Currently, **183 tests are GREEN**, includin
 2.  **Next delivery slice:** continue with manual packaged-app smoke testing now that the GitHub release contains only canonical desktop asset names and the workflow artifacts are stable across Windows, macOS, and Linux.
 
 _Reference `docs/08_roadmap.md` and the implementation plan artifact for the full checklist._
+
+### Latest Resume Point (2026-03-20)
+
+- The packaged desktop app now owns a bundled local runtime sidecar. Manual packaged-app smoke testing should validate that installed builds no longer depend on an external `127.0.0.1:3011` server.
+- The next Milestone 20 delivery slice is installed-app validation on Windows/macOS/Linux:
+  - launch packaged app
+  - confirm runtime bootstrap succeeds
+  - load/save settings through the modal
+  - connect/test providers
+  - start/resume/send/HITL flows
+  - verify clean shutdown
+- After that smoke pass, decide whether to keep or trim the browser fallback and HTTP dev bridge scaffolding as long-term developer tooling.

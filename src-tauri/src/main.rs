@@ -1,83 +1,127 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::collections::HashMap;
-use std::fs;
 use std::io::{BufRead, BufReader};
+use std::net::TcpListener;
 use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
 use std::sync::{mpsc, Mutex};
-use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use std::time::{Duration, Instant};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+const DEV_RUNTIME_PORT: u16 = 3011;
+
+#[derive(Default)]
+struct ManagedRuntimeState {
+    // The packaged desktop app owns one local runtime process and can relay
+    // multiple live session streams through native Tauri events at once.
+    subscriptions: Mutex<HashMap<String, mpsc::Sender<()>>>,
+    process: Mutex<Option<Child>>,
+    base_url: Mutex<Option<String>>,
+}
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DesktopBridgeStatus {
     mode: String,
     backend: String,
     healthy: bool,
-    #[serde(rename = "baseUrl")]
+    #[serde(rename = "runtimeOwner")]
+    runtime_owner: String,
     base_url: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DesktopNotificationSettings {
+    permissions: bool,
+    completion_summary: bool,
+    needs_attention: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct DesktopUpdateSettings {
+    auto_check: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct DesktopProviderConnection {
+    api_key: Option<String>,
+    base_url: Option<String>,
+    connected: Option<bool>,
+    default_model: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 struct DesktopConfig {
     provider: String,
     model: String,
     streaming: bool,
+    permission_mode: Option<String>,
+    appearance: Option<String>,
+    notifications: DesktopNotificationSettings,
+    updates: DesktopUpdateSettings,
+    provider_connections: HashMap<String, DesktopProviderConnection>,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopWorkspaceContext {
+    git_branch: Option<String>,
+    permission_mode: String,
+    execution_mode: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct DesktopProviderConnectionResult {
+    ok: bool,
+    message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopUpdateCheckResult {
+    checked_at: u64,
+    available: bool,
+    current_version: String,
+    latest_version: Option<String>,
+    download_url: Option<String>,
+    message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DesktopMessage {
     role: String,
     content: String,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DesktopMetrics {
-    #[serde(rename = "totalTokens")]
     total_tokens: u32,
-    #[serde(rename = "cacheHitRate")]
     cache_hit_rate: u32,
-    #[serde(rename = "toolCallCount")]
     tool_call_count: u32,
-    #[serde(rename = "turnCount")]
     turn_count: u32,
-    #[serde(rename = "totalCost")]
     total_cost: u32,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DesktopSessionSnapshot {
-    #[serde(rename = "sessionId")]
     session_id: String,
     provider: String,
     model: String,
     description: Option<String>,
-    #[serde(rename = "lastSavedAt")]
     last_saved_at: Option<u64>,
     messages: Vec<DesktopMessage>,
     metrics: DesktopMetrics,
-}
-
-#[derive(Deserialize)]
-struct SessionHeader {
-    #[serde(rename = "sessionId")]
-    session_id: String,
-    #[serde(rename = "lastSavedAt")]
-    last_saved_at: u64,
-    provider: String,
-    model: String,
-    description: Option<String>,
-}
-
-struct PersistedSessionSnapshot {
-    snapshot: DesktopSessionSnapshot,
-    last_saved_at: u64,
-}
-
-#[derive(Default)]
-struct RuntimeSubscriptionState {
-    subscriptions: Mutex<HashMap<String, mpsc::Sender<()>>>,
 }
 
 #[derive(Deserialize)]
@@ -100,146 +144,136 @@ struct AnswerHitlArgs {
     answer: String,
 }
 
-#[tauri::command]
-fn runtime_base_url() -> String {
-    std::env::var("JOONE_DESKTOP_RUNTIME_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:3011".to_string())
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TestProviderConnectionArgs {
+    provider: String,
+    connection: DesktopProviderConnection,
 }
 
 #[tauri::command]
-fn runtime_status() -> DesktopBridgeStatus {
-    let base_url = runtime_base_url();
-    let healthy = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .ok()
-        .and_then(|client| client.get(format!("{base_url}/health")).send().ok())
-        .map(|response| response.status().is_success())
-        .unwrap_or(false);
+fn runtime_base_url(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<String, String> {
+    ensure_runtime_url(&app, state.inner())
+}
 
-    DesktopBridgeStatus {
+#[tauri::command]
+fn runtime_status(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<DesktopBridgeStatus, String> {
+    let base_url = ensure_runtime_url(&app, state.inner())?;
+    Ok(DesktopBridgeStatus {
         mode: "tauri".to_string(),
         backend: "runtime".to_string(),
-        healthy,
+        healthy: check_runtime_health(&base_url),
+        runtime_owner: resolve_runtime_owner().to_string(),
         base_url,
-    }
+    })
 }
 
 #[tauri::command]
-fn runtime_load_config() -> DesktopConfig {
-    let mut config = DesktopConfig {
-        provider: "anthropic".to_string(),
-        model: "claude-sonnet-4-20250514".to_string(),
-        streaming: true,
-    };
-
-    let Some(config_path) = joone_config_path() else {
-        return config;
-    };
-
-    let Ok(raw) = fs::read_to_string(config_path) else {
-        return config;
-    };
-
-    let Ok(parsed) = serde_json::from_str::<Value>(&raw) else {
-        return config;
-    };
-
-    if let Some(provider) = parsed.get("provider").and_then(Value::as_str) {
-        config.provider = provider.to_string();
-    }
-    if let Some(model) = parsed.get("model").and_then(Value::as_str) {
-        config.model = model.to_string();
-    }
-    if let Some(streaming) = parsed.get("streaming").and_then(Value::as_bool) {
-        config.streaming = streaming;
-    }
-
-    config
+fn runtime_workspace_context(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<DesktopWorkspaceContext, String> {
+    runtime_get_json(&app, state.inner(), "/workspace/context")
 }
 
 #[tauri::command]
-fn runtime_save_config(config: DesktopConfig) -> Result<(), String> {
-    let Some(config_path) = joone_config_path() else {
-        return Err("Unable to resolve Joone config path".to_string());
-    };
-
-    let mut document = match fs::read_to_string(&config_path) {
-        Ok(raw) => serde_json::from_str::<Value>(&raw).unwrap_or_else(|_| Value::Object(Map::new())),
-        Err(_) => Value::Object(Map::new()),
-    };
-
-    if !document.is_object() {
-        document = Value::Object(Map::new());
-    }
-
-    let Some(parent) = config_path.parent() else {
-        return Err("Unable to resolve Joone config directory".to_string());
-    };
-
-    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-
-    let Value::Object(ref mut object) = document else {
-        return Err("Unable to prepare Joone config document".to_string());
-    };
-
-    object.insert("provider".to_string(), Value::String(config.provider));
-    object.insert("model".to_string(), Value::String(config.model));
-    object.insert("streaming".to_string(), Value::Bool(config.streaming));
-
-    let serialized = serde_json::to_string_pretty(&document).map_err(|error| error.to_string())?;
-    fs::write(config_path, serialized).map_err(|error| error.to_string())?;
-
-    Ok(())
+fn runtime_load_config(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<DesktopConfig, String> {
+    runtime_get_json(&app, state.inner(), "/config")
 }
 
 #[tauri::command]
-fn runtime_answer_hitl(args: AnswerHitlArgs) -> Result<(), String> {
+fn runtime_save_config(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+    config: DesktopConfig,
+) -> Result<(), String> {
+    runtime_post_no_content(&app, state.inner(), "/config", serde_json::to_value(config).map_err(|error| error.to_string())?)
+}
+
+#[tauri::command]
+fn runtime_test_provider_connection(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+    args: TestProviderConnectionArgs,
+) -> Result<DesktopProviderConnectionResult, String> {
+    runtime_post_with_body(
+        &app,
+        state.inner(),
+        &format!("/providers/{}/test", args.provider),
+        serde_json::to_value(args.connection).map_err(|error| error.to_string())?,
+    )
+}
+
+#[tauri::command]
+fn runtime_check_updates(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<DesktopUpdateCheckResult, String> {
+    runtime_get_json(&app, state.inner(), "/updates/check")
+}
+
+#[tauri::command]
+fn runtime_answer_hitl(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+    args: AnswerHitlArgs,
+) -> Result<(), String> {
     runtime_post_no_content(
+        &app,
+        state.inner(),
         &format!("/hitl/{}/answer", args.id),
         serde_json::json!({ "answer": args.answer }),
     )
 }
 
 #[tauri::command]
-fn runtime_list_sessions() -> Vec<DesktopSessionSnapshot> {
-    let Some(sessions_dir) = joone_sessions_dir() else {
-        return Vec::new();
-    };
-
-    let Ok(entries) = fs::read_dir(sessions_dir) else {
-        return Vec::new();
-    };
-
-    let mut sessions = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|value| value.to_str()) != Some("jsonl") {
-            continue;
-        }
-
-        if let Some(snapshot) = read_session_snapshot(&path) {
-            sessions.push(snapshot);
-        }
-    }
-
-    sessions.sort_by(|left, right| right.last_saved_at.cmp(&left.last_saved_at));
-    sessions.into_iter().map(|item| item.snapshot).collect()
+fn runtime_list_sessions(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<Vec<DesktopSessionSnapshot>, String> {
+    runtime_get_json(&app, state.inner(), "/sessions")
 }
 
 #[tauri::command]
-fn runtime_start_session() -> Result<DesktopSessionSnapshot, String> {
-    runtime_post("/sessions")
+fn runtime_start_session(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+) -> Result<DesktopSessionSnapshot, String> {
+    runtime_post_with_body(&app, state.inner(), "/sessions", serde_json::json!({}))
 }
 
 #[tauri::command]
-fn runtime_resume_session(args: SessionIdArgs) -> Result<DesktopSessionSnapshot, String> {
-    runtime_post(&format!("/sessions/{}/resume", args.session_id))
-}
-
-#[tauri::command]
-fn runtime_submit_message(args: SubmitMessageArgs) -> Result<DesktopSessionSnapshot, String> {
+fn runtime_resume_session(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+    args: SessionIdArgs,
+) -> Result<DesktopSessionSnapshot, String> {
     runtime_post_with_body(
+        &app,
+        state.inner(),
+        &format!("/sessions/{}/resume", args.session_id),
+        serde_json::json!({}),
+    )
+}
+
+#[tauri::command]
+fn runtime_submit_message(
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
+    args: SubmitMessageArgs,
+) -> Result<DesktopSessionSnapshot, String> {
+    runtime_post_with_body(
+        &app,
+        state.inner(),
         &format!("/sessions/{}/messages", args.session_id),
         serde_json::json!({ "text": args.text }),
     )
@@ -247,20 +281,21 @@ fn runtime_submit_message(args: SubmitMessageArgs) -> Result<DesktopSessionSnaps
 
 #[tauri::command]
 fn runtime_close_session(
-    state: State<RuntimeSubscriptionState>,
+    app: AppHandle,
+    state: State<ManagedRuntimeState>,
     args: SessionIdArgs,
 ) -> Result<(), String> {
-    unsubscribe_session(&state, &args.session_id);
-    runtime_delete(&format!("/sessions/{}", args.session_id))
+    unsubscribe_session(state.inner(), &args.session_id);
+    runtime_delete(&app, state.inner(), &format!("/sessions/{}", args.session_id))
 }
 
 #[tauri::command]
 fn runtime_subscribe_session(
     app: AppHandle,
-    state: State<RuntimeSubscriptionState>,
+    state: State<ManagedRuntimeState>,
     args: SessionIdArgs,
 ) -> Result<(), String> {
-    unsubscribe_session(&state, &args.session_id);
+    unsubscribe_session(state.inner(), &args.session_id);
 
     let (stop_tx, stop_rx) = mpsc::channel();
     state
@@ -270,7 +305,7 @@ fn runtime_subscribe_session(
         .insert(args.session_id.clone(), stop_tx);
 
     let session_id = args.session_id.clone();
-    let base_url = runtime_base_url();
+    let base_url = ensure_runtime_url(&app, state.inner())?;
     std::thread::spawn(move || {
         stream_runtime_events(app, &base_url, &session_id, stop_rx);
     });
@@ -280,64 +315,256 @@ fn runtime_subscribe_session(
 
 #[tauri::command]
 fn runtime_unsubscribe_session(
-    state: State<RuntimeSubscriptionState>,
+    state: State<ManagedRuntimeState>,
     args: SessionIdArgs,
 ) -> Result<(), String> {
-    unsubscribe_session(&state, &args.session_id);
+    unsubscribe_session(state.inner(), &args.session_id);
     Ok(())
 }
 
-fn joone_config_path() -> Option<PathBuf> {
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
-    Some(PathBuf::from(home).join(".joone").join("config.json"))
+fn ensure_runtime_url(app: &AppHandle, state: &ManagedRuntimeState) -> Result<String, String> {
+    if let Ok(url) = std::env::var("JOONE_DESKTOP_RUNTIME_URL") {
+        return Ok(url);
+    }
+
+    if cfg!(debug_assertions) {
+        return Ok(format!("http://127.0.0.1:{}", DEV_RUNTIME_PORT));
+    }
+
+    if let Ok(guard) = state.base_url.lock() {
+        if let Some(url) = guard.as_ref() {
+            if check_runtime_health(url) {
+                return Ok(url.clone());
+            }
+        }
+    }
+
+    spawn_managed_runtime(app, state)
 }
 
-fn joone_sessions_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"))?;
-    Some(PathBuf::from(home).join(".joone").join("sessions"))
+fn spawn_managed_runtime(app: &AppHandle, state: &ManagedRuntimeState) -> Result<String, String> {
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|error| error.to_string())?;
+
+    // Installed desktop builds boot a bundled Node sidecar instead of assuming
+    // an external runtime is already listening on a fixed port.
+    let script_path = resource_dir.join("dist").join("desktop").join("runtimeEntry.js");
+    if !script_path.exists() {
+        return Err(format!(
+            "Missing packaged desktop runtime entry at {}",
+            script_path.display()
+        ));
+    }
+
+    let port = pick_runtime_port()?;
+    let base_url = format!("http://127.0.0.1:{port}");
+    let node_path = resolve_bundled_node(&resource_dir)?;
+    let workspace_dir = default_workspace_dir();
+
+    let child = Command::new(node_path)
+        .arg(script_path)
+        .env("JOONE_DESKTOP_RUNTIME_PORT", port.to_string())
+        .env("JOONE_DESKTOP_WORKSPACE", workspace_dir)
+        .current_dir(&resource_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+
+    wait_for_runtime_health(&base_url)?;
+
+    if let Ok(mut process) = state.process.lock() {
+        if let Some(existing) = process.as_mut() {
+            let _ = existing.kill();
+        }
+        *process = Some(child);
+    }
+    if let Ok(mut stored_base_url) = state.base_url.lock() {
+        *stored_base_url = Some(base_url.clone());
+    }
+
+    Ok(base_url)
 }
 
-fn read_session_snapshot(path: &PathBuf) -> Option<PersistedSessionSnapshot> {
-    let raw = fs::read_to_string(path).ok()?;
-    let mut lines = raw.lines();
-    let header_line = lines.next()?;
-    let header_json = serde_json::from_str::<Value>(header_line).ok()?;
-    let header = serde_json::from_value::<SessionHeader>(header_json.get("header")?.clone()).ok()?;
+fn wait_for_runtime_health(base_url: &str) -> Result<(), String> {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < deadline {
+        if check_runtime_health(base_url) {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(200));
+    }
 
-    let messages = lines
-        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .map(|message| DesktopMessage {
-            role: match message.get("type").and_then(Value::as_str) {
-                Some("human") => "user".to_string(),
-                Some("ai") => "agent".to_string(),
-                _ => "system".to_string(),
-            },
-            content: message
-                .get("content")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-        })
-        .collect();
+    Err(format!("Timed out waiting for desktop runtime at {base_url}"))
+}
 
-    Some(PersistedSessionSnapshot {
-        last_saved_at: header.last_saved_at,
-        snapshot: DesktopSessionSnapshot {
-            session_id: header.session_id,
-            provider: header.provider,
-            model: header.model,
-            description: header.description,
-            last_saved_at: Some(header.last_saved_at),
-            messages,
-            metrics: DesktopMetrics {
-                total_tokens: 0,
-                cache_hit_rate: 0,
-                tool_call_count: 0,
-                turn_count: 0,
-                total_cost: 0,
-            },
-        },
-    })
+fn check_runtime_health(base_url: &str) -> bool {
+    Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .ok()
+        .and_then(|client| client.get(format!("{base_url}/health")).send().ok())
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
+}
+
+fn resolve_runtime_owner() -> &'static str {
+    if std::env::var("JOONE_DESKTOP_RUNTIME_URL").is_ok() || cfg!(debug_assertions) {
+        "external"
+    } else {
+        "managed"
+    }
+}
+
+fn resolve_bundled_node(resource_dir: &PathBuf) -> Result<PathBuf, String> {
+    let candidate = resource_dir.join(node_sidecar_name());
+    if candidate.exists() {
+        return Ok(candidate);
+    }
+
+    let fallback = resource_dir
+        .join("binaries")
+        .join(node_sidecar_name());
+    if fallback.exists() {
+        return Ok(fallback);
+    }
+
+    Err(format!(
+        "Bundled desktop runtime sidecar not found at {}",
+        candidate.display()
+    ))
+}
+
+fn node_sidecar_name() -> &'static str {
+    if cfg!(target_os = "windows") && cfg!(target_arch = "x86_64") {
+        "node-runtime-x86_64-pc-windows-msvc.exe"
+    } else if cfg!(target_os = "windows") && cfg!(target_arch = "aarch64") {
+        "node-runtime-aarch64-pc-windows-msvc.exe"
+    } else if cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") {
+        "node-runtime-x86_64-unknown-linux-gnu"
+    } else if cfg!(target_os = "linux") && cfg!(target_arch = "aarch64") {
+        "node-runtime-aarch64-unknown-linux-gnu"
+    } else if cfg!(target_os = "macos") && cfg!(target_arch = "aarch64") {
+        "node-runtime-aarch64-apple-darwin"
+    } else {
+        "node-runtime-x86_64-apple-darwin"
+    }
+}
+
+fn pick_runtime_port() -> Result<u16, String> {
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+    let port = listener
+        .local_addr()
+        .map_err(|error| error.to_string())?
+        .port();
+    drop(listener);
+    Ok(port)
+}
+
+fn default_workspace_dir() -> String {
+    std::env::var("JOONE_DESKTOP_WORKSPACE")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string())
+}
+
+fn runtime_get_json<T: for<'de> Deserialize<'de>>(
+    app: &AppHandle,
+    state: &ManagedRuntimeState,
+    path: &str,
+) -> Result<T, String> {
+    let base_url = ensure_runtime_url(app, state)?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .get(format!("{base_url}{path}"))
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    response.json::<T>().map_err(|error| error.to_string())
+}
+
+fn runtime_post_no_content(
+    app: &AppHandle,
+    state: &ManagedRuntimeState,
+    path: &str,
+    body: Value,
+) -> Result<(), String> {
+    let base_url = ensure_runtime_url(app, state)?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .post(format!("{base_url}{path}"))
+        .json(&body)
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    Ok(())
+}
+
+fn runtime_post_with_body<T: for<'de> Deserialize<'de>>(
+    app: &AppHandle,
+    state: &ManagedRuntimeState,
+    path: &str,
+    body: Value,
+) -> Result<T, String> {
+    let base_url = ensure_runtime_url(app, state)?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .post(format!("{base_url}{path}"))
+        .json(&body)
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    response.json::<T>().map_err(|error| error.to_string())
+}
+
+fn runtime_delete(
+    app: &AppHandle,
+    state: &ManagedRuntimeState,
+    path: &str,
+) -> Result<(), String> {
+    let base_url = ensure_runtime_url(app, state)?;
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?;
+
+    let response = client
+        .delete(format!("{base_url}{path}"))
+        .send()
+        .map_err(|error| error.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Runtime returned {}", response.status()));
+    }
+
+    Ok(())
 }
 
 fn stream_runtime_events(
@@ -346,7 +573,7 @@ fn stream_runtime_events(
     session_id: &str,
     stop_rx: mpsc::Receiver<()>,
 ) {
-    let client = match reqwest::blocking::Client::builder().build() {
+    let client = match Client::builder().build() {
         Ok(client) => client,
         Err(error) => {
             emit_runtime_error(&app, session_id, error.to_string());
@@ -396,73 +623,7 @@ fn emit_runtime_error(app: &AppHandle, session_id: &str, message: String) {
     );
 }
 
-fn runtime_post(path: &str) -> Result<DesktopSessionSnapshot, String> {
-    runtime_post_with_body(path, serde_json::json!({}))
-}
-
-fn runtime_post_no_content(path: &str, body: serde_json::Value) -> Result<(), String> {
-    let base_url = runtime_base_url();
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|error| error.to_string())?;
-
-    let response = client
-        .post(format!("{base_url}{path}"))
-        .json(&body)
-        .send()
-        .map_err(|error| error.to_string())?;
-
-    if !response.status().is_success() {
-        return Err(format!("Runtime returned {}", response.status()));
-    }
-
-    Ok(())
-}
-
-fn runtime_delete(path: &str) -> Result<(), String> {
-    let base_url = runtime_base_url();
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|error| error.to_string())?;
-
-    let response = client
-        .delete(format!("{base_url}{path}"))
-        .send()
-        .map_err(|error| error.to_string())?;
-
-    if !response.status().is_success() {
-        return Err(format!("Runtime returned {}", response.status()));
-    }
-
-    Ok(())
-}
-
-fn runtime_post_with_body(
-    path: &str,
-    body: serde_json::Value,
-) -> Result<DesktopSessionSnapshot, String> {
-    let base_url = runtime_base_url();
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|error| error.to_string())?;
-
-    let response = client
-        .post(format!("{base_url}{path}"))
-        .json(&body)
-        .send()
-        .map_err(|error| error.to_string())?;
-
-    if !response.status().is_success() {
-        return Err(format!("Runtime returned {}", response.status()));
-    }
-
-    response.json::<DesktopSessionSnapshot>().map_err(|error| error.to_string())
-}
-
-fn unsubscribe_session(state: &State<RuntimeSubscriptionState>, session_id: &str) {
+fn unsubscribe_session(state: &ManagedRuntimeState, session_id: &str) {
     if let Ok(mut subscriptions) = state.subscriptions.lock() {
         if let Some(stop_tx) = subscriptions.remove(session_id) {
             let _ = stop_tx.send(());
@@ -470,14 +631,38 @@ fn unsubscribe_session(state: &State<RuntimeSubscriptionState>, session_id: &str
     }
 }
 
+fn kill_runtime_process(state: &ManagedRuntimeState) {
+    if let Ok(mut process) = state.process.lock() {
+        if let Some(child) = process.as_mut() {
+            let _ = child.kill();
+        }
+        *process = None;
+    }
+
+    if let Ok(mut base_url) = state.base_url.lock() {
+        *base_url = None;
+    }
+}
+
 fn main() {
-    tauri::Builder::default()
-        .manage(RuntimeSubscriptionState::default())
+    let app = tauri::Builder::default()
+        .manage(ManagedRuntimeState::default())
+        .setup(|app| {
+            if !cfg!(debug_assertions) && std::env::var("JOONE_DESKTOP_RUNTIME_URL").is_err() {
+                let state: State<ManagedRuntimeState> = app.state();
+                spawn_managed_runtime(&app.handle(), state.inner())?;
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             runtime_base_url,
             runtime_status,
+            runtime_workspace_context,
             runtime_load_config,
             runtime_save_config,
+            runtime_test_provider_connection,
+            runtime_check_updates,
             runtime_answer_hitl,
             runtime_list_sessions,
             runtime_start_session,
@@ -487,6 +672,14 @@ fn main() {
             runtime_subscribe_session,
             runtime_unsubscribe_session
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Joone Desktop");
+        .build(tauri::generate_context!())
+        .expect("failed to build Joone Desktop");
+
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+            let state: State<ManagedRuntimeState> = app_handle.state();
+            kill_runtime_process(state.inner());
+        }
+        _ => {}
+    });
 }

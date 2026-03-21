@@ -109,6 +109,8 @@ chmod +x joone-desktop_0.1.0_linux_amd64.AppImage
 ./joone-desktop_0.1.0_linux_amd64.AppImage
 ```
 
+The packaged desktop app now launches and owns its bundled local runtime automatically. You do not need to start a separate `127.0.0.1:3011` runtime server for installed desktop builds.
+
 ### Desktop Web Shell + Runtime (Local Development)
 
 This runs the desktop React shell against the local Node runtime over HTTP/SSE:
@@ -186,8 +188,16 @@ Joone is built around the Execution Harness pattern, with a shared runtime layer
 
 1. Prompt Builder: constructs cache-friendly prompts and layered system context.
 2. Middleware Pipeline: applies loop detection, permissioning, command safeguards, and other runtime controls.
-3. Shared Runtime Service: exposes config, session, and streaming event APIs to the CLI and desktop surfaces.
-4. Hybrid Execution Layer: keeps local file edits on the host while routing risky execution to isolated environments.
+3. Shared Runtime Service: exposes config, session, provider-testing, update-check, workspace metadata, and streaming event APIs to the CLI and desktop surfaces.
+4. Desktop Runtime Ownership: packaged Tauri builds boot a bundled local Node runtime sidecar and proxy native commands/events to it.
+5. Hybrid Execution Layer: keeps local file edits on the host while routing risky execution to isolated environments.
+
+The desktop shell now uses:
+
+- a toggleable operator sidebar
+- a viewport-locked conversation workspace
+- a composer footer with model, permission mode, branch, and runtime status pills
+- a modal settings center with `General` and `Providers` sections, appearance controls, notifications, update checks, and provider connection management
 
 For deeper architecture notes, see:
 

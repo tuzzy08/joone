@@ -4,8 +4,11 @@ import type { Request, Response } from "express";
 import type { RuntimeEvent } from "../runtime/types.js";
 
 interface RuntimeLike {
+  getWorkspaceContext(): Promise<unknown>;
   loadConfig(): Promise<unknown>;
   saveConfig(config: unknown): Promise<void>;
+  testProviderConnection(provider: string, connection: unknown): Promise<unknown>;
+  checkForUpdates(): Promise<unknown>;
   answerHitl(id: string, answer: string): Promise<void>;
   listSessions(): Promise<unknown>;
   startSession(): Promise<unknown>;
@@ -53,6 +56,20 @@ export async function createDesktopRuntimeServer({
     response.json({ ok: true });
   });
 
+  app.get("/status", async (_request: Request, response: Response) => {
+    const workspace = (await runtime.getWorkspaceContext()) as Record<string, unknown>;
+    response.json({
+      backend: "runtime",
+      healthy: true,
+      runtimeOwner: "external",
+      ...workspace,
+    });
+  });
+
+  app.get("/workspace/context", async (_request: Request, response: Response) => {
+    response.json(await runtime.getWorkspaceContext());
+  });
+
   app.get("/config", async (_request: Request, response: Response) => {
     response.json(await runtime.loadConfig());
   });
@@ -60,6 +77,16 @@ export async function createDesktopRuntimeServer({
   app.post("/config", async (request: Request, response: Response) => {
     await runtime.saveConfig(request.body);
     response.status(204).end();
+  });
+
+  app.post("/providers/:provider/test", async (request: Request, response: Response) => {
+    response.json(
+      await runtime.testProviderConnection(asValue(request.params.provider), request.body),
+    );
+  });
+
+  app.get("/updates/check", async (_request: Request, response: Response) => {
+    response.json(await runtime.checkForUpdates());
   });
 
   app.post("/hitl/:id/answer", async (request: Request, response: Response) => {

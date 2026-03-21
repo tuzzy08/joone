@@ -1,14 +1,57 @@
+export interface DesktopProviderConnection {
+  apiKey?: string;
+  baseUrl?: string;
+  connected?: boolean;
+  defaultModel?: string;
+}
+
+export interface DesktopNotificationSettings {
+  permissions: boolean;
+  completionSummary: boolean;
+  needsAttention: boolean;
+}
+
+export interface DesktopUpdateSettings {
+  autoCheck: boolean;
+}
+
 export interface DesktopConfig {
   provider: string;
   model: string;
   streaming: boolean;
+  permissionMode?: "auto" | "ask_dangerous" | "ask_all";
+  appearance?: "light" | "dark";
+  notifications: DesktopNotificationSettings;
+  updates: DesktopUpdateSettings;
+  providerConnections: Record<string, DesktopProviderConnection>;
 }
 
 export interface DesktopBridgeStatus {
   mode: "browser" | "http" | "tauri";
   backend: "mock" | "runtime";
   healthy: boolean;
+  runtimeOwner?: "mock" | "external" | "managed";
   baseUrl?: string;
+}
+
+export interface DesktopWorkspaceContext {
+  gitBranch?: string | null;
+  permissionMode: "auto" | "ask_dangerous" | "ask_all";
+  executionMode?: "host" | "sandbox";
+}
+
+export interface DesktopProviderConnectionResult {
+  ok: boolean;
+  message: string;
+}
+
+export interface DesktopUpdateCheckResult {
+  checkedAt: number;
+  available: boolean;
+  currentVersion: string;
+  latestVersion?: string;
+  downloadUrl?: string;
+  message: string;
 }
 
 export interface DesktopMessage {
@@ -85,8 +128,14 @@ export type DesktopEvent =
 
 export interface DesktopBridge {
   getStatus(): Promise<DesktopBridgeStatus>;
+  getWorkspaceContext(): Promise<DesktopWorkspaceContext>;
   loadConfig(): Promise<DesktopConfig>;
   saveConfig(config: DesktopConfig): Promise<void>;
+  testProviderConnection(
+    provider: string,
+    connection: DesktopProviderConnection,
+  ): Promise<DesktopProviderConnectionResult>;
+  checkForUpdates(): Promise<DesktopUpdateCheckResult>;
   answerHitl(id: string, answer: string): Promise<void>;
   listSessions(): Promise<DesktopSessionSnapshot[]>;
   startSession(): Promise<DesktopSessionSnapshot>;

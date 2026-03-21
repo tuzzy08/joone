@@ -3,13 +3,33 @@ import type {
   DesktopBridgeStatus,
   DesktopConfig,
   DesktopEvent,
+  DesktopProviderConnection,
+  DesktopProviderConnectionResult,
   DesktopSessionSnapshot,
+  DesktopUpdateCheckResult,
+  DesktopWorkspaceContext,
 } from "./types";
 
 const DEFAULT_CONFIG: DesktopConfig = {
   provider: "anthropic",
   model: "claude-sonnet-4-20250514",
   streaming: true,
+  permissionMode: "auto",
+  appearance: "light",
+  notifications: {
+    permissions: true,
+    completionSummary: true,
+    needsAttention: true,
+  },
+  updates: {
+    autoCheck: true,
+  },
+  providerConnections: {
+    anthropic: {
+      connected: false,
+      defaultModel: "claude-sonnet-4-20250514",
+    },
+  },
 };
 
 export function createBrowserDesktopBridge(): DesktopBridge {
@@ -19,17 +39,58 @@ export function createBrowserDesktopBridge(): DesktopBridge {
     mode: "browser",
     backend: "mock",
     healthy: true,
+    runtimeOwner: "mock",
   };
+  const workspaceContext: DesktopWorkspaceContext = {
+    gitBranch: "mock-preview",
+    permissionMode: "auto",
+    executionMode: "host",
+  };
+  let config = structuredClone(DEFAULT_CONFIG);
 
   return {
     async getStatus() {
       return status;
     },
-    async loadConfig() {
-      return DEFAULT_CONFIG;
+    async getWorkspaceContext() {
+      return workspaceContext;
     },
-    async saveConfig() {
+    async loadConfig() {
+      return config;
+    },
+    async saveConfig(nextConfig) {
+      config = nextConfig;
+      workspaceContext.permissionMode = nextConfig.permissionMode ?? "auto";
       return;
+    },
+    async testProviderConnection(
+      provider: string,
+      connection: DesktopProviderConnection,
+    ): Promise<DesktopProviderConnectionResult> {
+      if (provider === "ollama") {
+        return {
+          ok: Boolean(connection.baseUrl),
+          message: connection.baseUrl
+            ? `Saved local endpoint ${connection.baseUrl}.`
+            : "Enter an Ollama base URL first.",
+        };
+      }
+
+      return {
+        ok: Boolean(connection.apiKey),
+        message: connection.apiKey
+          ? `Saved credentials for ${provider}.`
+          : `Enter an API key for ${provider}.`,
+      };
+    },
+    async checkForUpdates(): Promise<DesktopUpdateCheckResult> {
+      return {
+        checkedAt: Date.now(),
+        available: false,
+        currentVersion: "0.1.0",
+        latestVersion: "0.1.0",
+        message: "Browser preview is already on the latest mock build.",
+      };
     },
     async answerHitl() {
       return;
